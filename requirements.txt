@@ -5,3 +5,5 @@ torch
 torchvision
 tqdm
 wandb
+colossalai
+SimpleITK
