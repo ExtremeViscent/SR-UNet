@@ -1,8 +1,13 @@
 import torch.nn as nn
+import torch
+import torch.optim as optim
 
 from .buildingblocks import DoubleConv, ExtResNetBlock, create_encoders, \
     create_decoders
 from .utils import number_of_features_per_level, get_class
+
+
+
 
 
 class Abstract3DUNet(nn.Module):
@@ -95,6 +100,77 @@ class Abstract3DUNet(nn.Module):
         return x
 
 
+class Abstract3DBUNet(Abstract3DUNet):
+    def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
+                 num_groups=8, num_levels=4, is_segmentation=True, conv_kernel_size=3, pool_kernel_size=2,
+                 conv_padding=1, latent_size=16, **kwargs):
+        super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
+                                              layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
+                                              pool_kernel_size, conv_padding, **kwargs)
+        self.mu     = nn.Linear(8, latent_size)
+        self.logvar = nn.Linear(8, latent_size)
+
+        self.enc_mu = None
+        self.enc_logvar = None
+        self.latent_to_decode = nn.Linear(latent_size, 8)
+
+    def forward(self, x):
+        # encoder part
+        encoders_features = []
+        for encoder in self.encoders:
+            x = encoder(x)
+            # reverse the encoder outputs to be aligned with the decoder
+            encoders_features.insert(0, x)
+        # VAE part
+        # x = x.view(x.size(0),-1)
+        mu     = self.mu(x)
+        logvar = self.logvar(x)
+        
+        self.enc_mu = mu
+        self.enc_logvar = logvar
+        sample = self.sample_from_mu_var(mu,logvar)
+        x = self.latent_to_decode(sample)
+        # encoders_features.insert(2, x)
+        # remove the last encoder's output from the list
+        # !!remember: it's the 1st in the list
+        encoders_features = encoders_features[1:]
+
+        # decoder part
+        for decoder, encoder_features in zip(self.decoders, encoders_features):
+            # pass the output from the corresponding encoder and the output
+            # of the previous decoder
+            x = decoder(encoder_features, x)
+
+        x = self.final_conv(x)
+
+        # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs logits
+        if not self.training and self.final_activation is not None:
+            x = self.final_activation(x)
+
+        return x  
+
+    def sample_from_mu_var(self,mu,logvar):
+         std = torch.exp(0.5*logvar)
+         eps = torch.randn_like(std)
+         sample = eps.mul(std).add_(mu)
+         return sample
+          
+    def VAE_loss(self,im,im_hat):
+        
+        mu, logvar = self.enc_mu, self.enc_logvar
+        kl   =  0.5 * (logvar.exp() + mu**2 -1 - logvar)
+        kl   = torch.sum(kl)
+        
+        err  = im - im_hat
+        serr = torch.square(err)
+        sse  = torch.sum(serr) 
+        
+        
+        FE_simple  = sse + kl
+        #print('FE, mse:', mse)
+        #print('FE, kl:', kl)
+        return FE_simple
+
 class UNet3D(Abstract3DUNet):
     """
     3DUnet model from
@@ -118,6 +194,20 @@ class UNet3D(Abstract3DUNet):
                                      conv_padding=conv_padding,
                                      **kwargs)
 
+class BUNet3D(Abstract3DBUNet):
+    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
+                 num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, **kwargs):
+        super(BUNet3D, self).__init__(in_channels=in_channels,
+                                     out_channels=out_channels,
+                                     final_sigmoid=final_sigmoid,
+                                     basic_module=DoubleConv,
+                                     f_maps=f_maps,
+                                     layer_order=layer_order,
+                                     num_groups=num_groups,
+                                     num_levels=num_levels,
+                                     is_segmentation=is_segmentation,
+                                     conv_padding=conv_padding,
+                                     **kwargs)
 
 class ResidualUNet3D(Abstract3DUNet):
     """
