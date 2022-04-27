@@ -15,16 +15,26 @@ from tqdm import trange
 
 
 class SynthdHCPDataset(Dataset):
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, phase="train", num_samples=None):
         self.data_dir = data_dir
+        self.phase = phase
         list_files = glob.glob(op.join(data_dir, '*.nii.gz'))
         self.ids = list(set([int(op.basename(f).split('_')[0]) for f in list_files]))
         # self.num_samples = len(self.ids)
-        self.num_samples = max(self.ids) + 1
+        if num_samples is None:
+            self.num_samples = len(self.ids)
+        else:
+            self.num_samples = max(num_samples, 10)
         if not self.ids:
             raise RuntimeError(f'No input file found in {data_dir}, make sure you put your images there')
+        if phase == "train":
+            self.ids = self.ids[:int(0.8 * self.num_samples)]
+            self.num_samples = int(0.8 * self.num_samples)
+        elif phase == "val":
+            self.ids = self.ids[int(0.8 * self.num_samples):]
+            self.num_samples = int(0.2 * self.num_samples)
         logging.info(f'Creating dataset with {self.num_samples} examples')
-        self.load(data_dir)
+        self.load(data_dir, phase=phase)
 
 
 
@@ -38,10 +48,10 @@ class SynthdHCPDataset(Dataset):
         gt = np.expand_dims(gt, axis=0)
         return image, gt
 
-    def load(self, data_dir):
+    def load(self, data_dir, phase="train"):
         images = []
         gts = []
-        for idx in trange(0, self.num_samples):
+        for idx in trange(0, self.num_samples) if phase == "train" else trange(len(self.ids)-self.num_samples, len(self.ids)):
             image = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image.nii.gz'))
             gt = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_target.nii.gz'))
             # label = sitk.ReadImage(op.join(data_dir, str(idx) + '_label.nii.gz'))

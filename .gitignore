@@ -10,4 +10,5 @@ wandb/
 dev/
 logs/
 ckpt/
+output/
 nohup.out
