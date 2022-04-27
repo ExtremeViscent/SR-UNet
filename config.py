@@ -1,8 +1,8 @@
 from colossalai.amp import AMP_TYPE
 
-DATA_DIR="/media/hdd/viscent/SynthSR/generated_data"
+DATA_DIR="/media/hdd/viscent/SynthSR/generated_data_multimodal"
 BATCH_SIZE=4
-IN_CHANNELS=1
+IN_CHANNELS=2
 OUT_CHANNELS=1
 NUM_EPOCHS=200
 F_MAPS=[16, 32, 64, 128, 256]
