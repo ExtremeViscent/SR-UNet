@@ -2,12 +2,12 @@ import torch.nn as nn
 import torch
 import torch.optim as optim
 
+from colossalai.core import global_context as gpc
+from colossalai.logging import disable_existing_loggers, get_dist_logger
+
 from .buildingblocks import DoubleConv, ExtResNetBlock, create_encoders, \
     create_decoders
 from .utils import number_of_features_per_level, get_class
-
-
-
 
 
 class Abstract3DUNet(nn.Module):
@@ -46,7 +46,8 @@ class Abstract3DUNet(nn.Module):
         super(Abstract3DUNet, self).__init__()
 
         if isinstance(f_maps, int):
-            f_maps = number_of_features_per_level(f_maps, num_levels=num_levels)
+            f_maps = number_of_features_per_level(
+                f_maps, num_levels=num_levels)
 
         assert isinstance(f_maps, list) or isinstance(f_maps, tuple)
         assert len(f_maps) > 1, "Required at least 2 levels in the U-Net"
@@ -103,13 +104,14 @@ class Abstract3DUNet(nn.Module):
 class Abstract3DBUNet(Abstract3DUNet):
     def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
                  num_groups=8, num_levels=4, is_segmentation=True, conv_kernel_size=3, pool_kernel_size=2,
-                 conv_padding=1, latent_size=16, **kwargs):
+                 conv_padding=1, latent_size=16, alpha=0.8, **kwargs):
         super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
-        self.mu     = nn.Linear(8, latent_size)
+        self.mu = nn.Linear(8, latent_size)
         self.logvar = nn.Linear(8, latent_size)
-
+        self.alpha = alpha
+        self.logger = get_dist_logger()
         self.enc_mu = None
         self.enc_logvar = None
         self.latent_to_decode = nn.Linear(latent_size, 8)
@@ -123,12 +125,13 @@ class Abstract3DBUNet(Abstract3DUNet):
             encoders_features.insert(0, x)
         # VAE part
         # x = x.view(x.size(0),-1)
-        mu     = self.mu(x)
+        mu = self.mu(x)
         logvar = self.logvar(x)
-        
+        self.kl = None
+        self.mse = None
         self.enc_mu = mu
         self.enc_logvar = logvar
-        sample = self.sample_from_mu_var(mu,logvar)
+        sample = self.sample_from_mu_var(mu, logvar)
         x = self.latent_to_decode(sample)
         # encoders_features.insert(2, x)
         # remove the last encoder's output from the list
@@ -147,29 +150,42 @@ class Abstract3DBUNet(Abstract3DUNet):
         if not self.training and self.final_activation is not None:
             x = self.final_activation(x)
 
-        return x  
+        return x
 
-    def sample_from_mu_var(self,mu,logvar):
-         std = torch.exp(0.5*logvar)
-         eps = torch.randn_like(std)
-         sample = eps.mul(std).add_(mu)
-         return sample
-          
-    def VAE_loss(self,im,im_hat):
-        
+    def sample_from_mu_var(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        sample = eps.mul(std).add_(mu)
+        return sample
+
+
+    def VAE_loss(self, im, im_hat):
+
+        im = im.squeeze()
+
         mu, logvar = self.enc_mu, self.enc_logvar
-        kl   =  0.5 * (logvar.exp() + mu**2 -1 - logvar)
-        kl   = torch.sum(kl)
-        
-        err  = im - im_hat
-        serr = torch.square(err)
-        sse  = torch.sum(serr) 
-        
-        
-        FE_simple  = sse + kl
+        # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)
+        kl = 0.5 * (logvar.exp() + mu**2 - 1 - logvar)
+        kl = torch.sum(kl)
+        # print("mu shape: ", mu.shape)
+        # print("logvar shape: ", logvar.shape)
+        # print("kl shape: ", kl.shape)
+
+        # err = im - im_hat
+        # serr = torch.square(err)
+        # sse = torch.sum(serr)
+
+        mse = torch.nn.MSELoss()(im, im_hat)
+        self.mse = mse
+        self.kl = kl
+        # self.logger.info("MSE: {}".format(mse))
+        # self.logger.info("KL: {}".format(kl*self.alpha))
+        FE_simple = mse + self.alpha * kl
+        # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple
         #print('FE, mse:', mse)
         #print('FE, kl:', kl)
         return FE_simple
+
 
 class UNet3D(Abstract3DUNet):
     """
@@ -194,20 +210,22 @@ class UNet3D(Abstract3DUNet):
                                      conv_padding=conv_padding,
                                      **kwargs)
 
+
 class BUNet3D(Abstract3DBUNet):
     def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
                  num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, **kwargs):
         super(BUNet3D, self).__init__(in_channels=in_channels,
-                                     out_channels=out_channels,
-                                     final_sigmoid=final_sigmoid,
-                                     basic_module=DoubleConv,
-                                     f_maps=f_maps,
-                                     layer_order=layer_order,
-                                     num_groups=num_groups,
-                                     num_levels=num_levels,
-                                     is_segmentation=is_segmentation,
-                                     conv_padding=conv_padding,
-                                     **kwargs)
+                                      out_channels=out_channels,
+                                      final_sigmoid=final_sigmoid,
+                                      basic_module=DoubleConv,
+                                      f_maps=f_maps,
+                                      layer_order=layer_order,
+                                      num_groups=num_groups,
+                                      num_levels=num_levels,
+                                      is_segmentation=is_segmentation,
+                                      conv_padding=conv_padding,
+                                      **kwargs)
+
 
 class ResidualUNet3D(Abstract3DUNet):
     """
@@ -257,5 +275,6 @@ class UNet2D(Abstract3DUNet):
 
 
 def get_model(model_config):
-    model_class = get_class(model_config['name'], modules=['pytorch3dunet.unet3d.model'])
+    model_class = get_class(model_config['name'], modules=[
+                            'pytorch3dunet.unet3d.model'])
     return model_class(**model_config)
