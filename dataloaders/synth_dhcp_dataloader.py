@@ -8,16 +8,16 @@ import os
 def get_transform(**kwargs):
     return None
 
-def get_dataloader(data_dir=None,batch_size:int=1,**kwargs):
+def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output",**kwargs):
     dataset = SynthdHCPDataset(data_dir,**kwargs)
     dataset_val = SynthdHCPDataset(data_dir,phase='val',**kwargs)
     kfold = KFold(n_splits=5, shuffle=True)
     loaders = []
     for fold, (train_ids, test_ids) in enumerate(kfold.split(dataset)):
-        if not os.path.exists("./output"):
-            os.makedirs("./output")
-        np.save(f"./output/train_ids_{fold}.npy", train_ids)
-        np.save(f"./output/test_ids_{fold}.npy", test_ids)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        np.save(os.path.join(output_dir, 'train_ids_{}.npy'.format(fold)), train_ids)
+        np.save(os.path.join(output_dir, 'test_ids_{}.npy'.format(fold)), test_ids)
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
         test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
         trainloader = torch.utils.data.DataLoader(

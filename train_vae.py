@@ -1,8 +1,8 @@
 from datetime import date
+from sched import scheduler
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchsummary import summary
 
 import colossalai
 import colossalai.utils as utils
@@ -12,6 +12,7 @@ from colossalai.engine.schedule import (InterleavedPipelineSchedule,
                                         PipelineSchedule)
 from colossalai.logging import disable_existing_loggers, get_dist_logger
 from colossalai.trainer import Trainer, hooks
+from colossalai.nn.lr_scheduler import CosineAnnealingLR
 
 
 from dataloaders import get_synth_dhcp_dataloader
@@ -26,10 +27,8 @@ import time
 import numpy as np
 
 
-
-
 class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
-    def __init__(self, checkpoint_dir, output_dir, dataloader, fold,priority=10):
+    def __init__(self, checkpoint_dir, output_dir, dataloader, fold, priority=10):
         super(SaveAndEvalByEpochHook, self).__init__(priority=priority)
         self.checkpoint_dir = checkpoint_dir
         self.output_dir = output_dir
@@ -46,14 +45,21 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
             os.makedirs(self.pred_dir)
         if not os.path.exists(os.path.join(self.pred_dir, '2d')):
             os.makedirs(os.path.join(self.pred_dir, '2d'))
+        self.logger = get_dist_logger()
+
+    # def after_test_iter(self, trainer, output, label, loss):
+    #     model = trainer.engine.model
+    #     kl, mse = model.get_metrics()
+    #     self.logger.info('Epoch: {} MSE: {} KL: {}'.format(trainer.cur_epoch, mse, kl))
+
 
     def after_train_epoch(self, trainer):
         model = trainer.engine.model
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         torch.save(dict(state_dict=model.state_dict()),
-                   os.path.join(self.checkpoint_dir,'{}.pth'.format(trainer.cur_epoch)))
-        image,target=self.dataloader.dataset.__getitem__(0)
+                   os.path.join(self.checkpoint_dir, '{}.pth'.format(trainer.cur_epoch)))
+        image, target = self.dataloader.dataset.__getitem__(0)
         image = torch.tensor(image).unsqueeze(0).cuda()
         target = torch.tensor(target).unsqueeze(0).cuda()
         model.eval()
@@ -61,35 +67,35 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
         image = image.cpu().detach().numpy().astype(np.float32)
         target = target.cpu().detach().numpy().astype(np.float32)
         pred = pred.cpu().detach().numpy().astype(np.float32)
-        im_pred = pred[0,0,48,:,:]
-        im_pred = (im_pred-np.min(im_pred))/(np.max(im_pred)-np.min(im_pred))*255
+        im_pred = pred[0, 0, 48, :, :]
+        im_pred = (im_pred-np.min(im_pred)) / \
+            (np.max(im_pred)-np.min(im_pred))*255
         im_pred = Image.fromarray(im_pred).convert('RGB')
-        if trainer.cur_epoch==0:
+        if trainer.cur_epoch == 0:
             if gpc.config.IN_CHANNELS == 2:
-                sitk.WriteImage(sitk.GetImageFromArray(image[0,0,:,:,:]),
-                            os.path.join(self.output_dir, 'image_t1.nii.gz'))
-                sitk.WriteImage(sitk.GetImageFromArray(image[0,1,:,:,:]),
-                            os.path.join(self.output_dir, 'image_t2.nii.gz'))
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
+                                os.path.join(self.output_dir, 'image_t1.nii.gz'))
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 1, :, :, :]),
+                                os.path.join(self.output_dir, 'image_t2.nii.gz'))
             else:
-                sitk.WriteImage(sitk.GetImageFromArray(image[0,0,:,:,:]),
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
                                 os.path.join(self.output_dir, 'image.nii.gz'))
-            sitk.WriteImage(sitk.GetImageFromArray(target[0,:,:,:]),
+            sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
                             os.path.join(self.output_dir, 'target.nii.gz'))
-            im_image = image[0,1,48,:,:]
-            im_target = target[0,48,:,:]
-            im_image = (im_image-np.min(im_image))/(np.max(im_image)-np.min(im_image))*255
-            im_target = (im_target-np.min(im_target))/(np.max(im_target)-np.min(im_target))*255
+            im_image = image[0, 1, 48, :, :]
+            im_target = target[0, 48, :, :]
+            im_image = (im_image-np.min(im_image)) / \
+                (np.max(im_image)-np.min(im_image))*255
+            im_target = (im_target-np.min(im_target)) / \
+                (np.max(im_target)-np.min(im_target))*255
             im_image = Image.fromarray(im_image).convert('RGB')
             im_target = Image.fromarray(im_target).convert('RGB')
             im_image.save(os.path.join(self.output_dir, 'image.png'))
             im_target.save(os.path.join(self.output_dir, 'target.png'))
-        sitk.WriteImage(sitk.GetImageFromArray(pred[0,0,:,:,:]),
+        sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
                         os.path.join(self.pred_dir, '{}.nii.gz'.format(trainer.cur_epoch)))
-        im_pred.save(os.path.join(self.pred_dir,"2d", '{}.png'.format(trainer.cur_epoch)))
-
-        
-
-
+        im_pred.save(os.path.join(self.pred_dir, "2d",
+                     '{}.png'.format(trainer.cur_epoch)))
 
 
 def train():
@@ -107,14 +113,17 @@ def train():
     else:
         colossalai.launch_from_torch(config=args.config)
     logger = get_dist_logger()
-    if not os.path.exists('output'):
-        os.makedirs('output')
-    logger.log_to_file(os.path.join('output', 'log_{}.txt'.format(str(time.time()))))
+    output_dir = gpc.config.OUTPUT_DIR
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    logger.log_to_file(os.path.join(
+        output_dir, 'log_{}'.format(str(time.time()))))
     logger.info('Build data loader')
     dataloaders, val_loader = get_synth_dhcp_dataloader(data_dir=gpc.config.DATA_DIR,
                                                         batch_size=gpc.config.BATCH_SIZE,
                                                         num_samples=50 if gpc.config.SMALL_DATA else None,
-                                                        dual_modal=True if gpc.config.IN_CHANNELS == 2 else False,)
+                                                        dual_modal=True if gpc.config.IN_CHANNELS == 2 else False,
+                                                        output_dir=output_dir,)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
     #                out_channels=gpc.config.OUT_CHANNELS,
     #                f_maps=gpc.config.F_MAPS,
@@ -128,22 +137,28 @@ def train():
         logger.info('Training fold {}'.format(i), ranks=[0])
         train_loader, test_loader = dataloaders[i]
         model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
-                       out_channels=gpc.config.OUT_CHANNELS,
-                       f_maps=gpc.config.F_MAPS,
-                       layer_order='gcr',
-                       num_groups=8,
-                       is_segmentation=False)
+                        out_channels=gpc.config.OUT_CHANNELS,
+                        f_maps=gpc.config.F_MAPS,
+                        layer_order='gcr',
+                        num_groups=8,
+                        is_segmentation=False,
+                        latent_size=gpc.config.LATENT_SIZE,
+                        alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.8)
+
         criterion = model.VAE_loss
         # criterion = torch.nn.MSELoss
         logger.info('Initializing K-Fold', ranks=[0])
         optim = torch.optim.Adam(
             model.parameters(),
-            lr=0.001,
+            lr=gpc.config.LR,
             betas=(0.9, 0.99)
         )
+        lr_scheduler = CosineAnnealingLR(
+            optim, gpc.config.NUM_EPOCHS*(train_loader.__len__()//gpc.config.BATCH_SIZE))
         engine, train_dataloader, test_dataloader, lr_scheduler = colossalai.initialize(
             model=model,
             optimizer=optim,
+            lr_scheduler=lr_scheduler,
             criterion=criterion,
             train_dataloader=train_loader,
             test_dataloader=test_loader,
@@ -154,15 +169,15 @@ def train():
             hooks.LossHook(),
             # hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
             hooks.LogMetricByEpochHook(logger),
-            hooks.TensorboardHook(log_dir='./logs/{}'.format(i)),
+            hooks.TensorboardHook(log_dir=os.path.join(output_dir,'logs','{}'.format(i))),
             hooks.SaveCheckpointHook(
-                checkpoint_dir='./ckpt/fold_{}.pt'.format(i),
+                checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}.pt'.format(i)),
                 model=model),
             SaveAndEvalByEpochHook(
-                checkpoint_dir='./ckpt/{}'.format(i),
-                output_dir='./output/{}'.format(i),
+                checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}'.format(i)),
+                output_dir=os.path.join(output_dir,'{}'.format(i)),
                 dataloader=val_loader,
-                fold = i)
+                fold=i)
         ]
         trainer = Trainer(engine=engine, logger=logger)
         # for epoch in range(gpc.config.NUM_EPOCHS):
@@ -188,5 +203,3 @@ def train():
 
 if __name__ == '__main__':
     train()
-
-
