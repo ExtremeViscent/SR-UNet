@@ -13,3 +13,4 @@ hiddenlayer
 h5py
 torchviz
 IPython
+tensorboard
