@@ -12,3 +12,4 @@ sklearn
 hiddenlayer
 h5py
 torchviz
+IPython
