@@ -8,3 +8,7 @@ wandb
 colossalai
 SimpleITK
 torchsummary
+sklearn
+hiddenlayer
+h5py
+torchviz
