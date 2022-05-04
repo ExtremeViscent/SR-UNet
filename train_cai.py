@@ -26,6 +26,8 @@ from PIL import Image
 import os
 import time
 import numpy as np
+import hiddenlayer as hl
+from torchviz import make_dot
 
 
 class custom_MSE(torch.nn.MSELoss):
@@ -68,8 +70,10 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
         image, target = self.dataloader.dataset.__getitem__(0)
         image = torch.tensor(image).unsqueeze(0).cuda()
         target = torch.tensor(target).unsqueeze(0).cuda()
+        _image = image
         model.eval()
         pred = trainer.engine(image)
+        _pred = pred
         image = image.cpu().detach().numpy().astype(np.float32)
         target = target.cpu().detach().numpy().astype(np.float32)
         pred = pred.cpu().detach().numpy().astype(np.float32)
@@ -78,6 +82,10 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
             (np.max(im_pred)-np.min(im_pred))*255
         im_pred = Image.fromarray(im_pred).convert('RGB')
         if trainer.cur_epoch == 0:
+            # graph = hl.build_graph(model, _image)
+            # graph.theme = hl.graph.THEMES['blue'].copy()
+            # graph.save(os.path.join(self.output_dir, 'graph.png'),format='png')
+            make_dot(_pred,params=dict(model.named_parameters())).render(os.path.join(self.output_dir, 'graph_1.png'))
             if gpc.config.IN_CHANNELS == 2:
                 sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
                                 os.path.join(self.output_dir, 'image_t1.nii.gz'))
@@ -86,10 +94,10 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
             else:
                 sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
                                 os.path.join(self.output_dir, 'image.nii.gz'))
-            sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
+            sitk.WriteImage(sitk.GetImageFromArray(target[0, 0, :, :, :]),
                             os.path.join(self.output_dir, 'target.nii.gz'))
-            im_image = image[0, 1, 48, :, :]
-            im_target = target[0, 48, :, :]
+            im_image = image[0, 0, 48, :, :]
+            im_target = target[0, 0, 48, :, :]
             im_image = (im_image-np.min(im_image)) / \
                 (np.max(im_image)-np.min(im_image))*255
             im_target = (im_target-np.min(im_target)) / \
@@ -102,6 +110,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
                         os.path.join(self.pred_dir, '{}.nii.gz'.format(trainer.cur_epoch)))
         im_pred.save(os.path.join(self.pred_dir, "2d",
                      '{}.png'.format(trainer.cur_epoch)))
+        model.train()
 
 def get_dataloader(config):
     if config.DATASET == 'synth':
@@ -158,8 +167,8 @@ def train():
                         )
 
         # criterion = model.VAE_loss
-        # criterion = torch.nn.MSELoss()
-        criterion = custom_MSE()
+        criterion = torch.nn.MSELoss()
+        # criterion = custom_MSE()
         logger.info('Initializing K-Fold', ranks=[0])
         optim = torch.optim.Adam(
             model.parameters(),
@@ -186,6 +195,7 @@ def train():
             hooks.SaveCheckpointHook(
                 checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}.pt'.format(i)),
                 model=model),
+            hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
             SaveAndEvalByEpochHook(
                 checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}'.format(i)),
                 output_dir=os.path.join(output_dir,'{}'.format(i)),

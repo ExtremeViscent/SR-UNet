@@ -48,17 +48,17 @@ class SynthdHCPDataset(Dataset):
         image = self.images[idx]
         gt = self.gts[idx]
         # image = np.expand_dims(image, axis=0)
-        # gt = np.expand_dims(gt, axis=0)
+        gt = np.expand_dims(gt, axis=0)
         return image, gt
 
     def load(self, data_dir, phase="train"):
         images = []
         gts = []
         for idx in trange(0, self.num_samples) if phase == "train" else trange(len(self.ids)-self.num_samples, len(self.ids)):
-            image = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image.nii.gz'))
+            image = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz'))
             gt = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_target.nii.gz'))
             # label = sitk.ReadImage(op.join(data_dir, str(idx) + '_label.nii.gz'))
-            images.append(sitk.GetArrayFromImage(image))
+            images.append(np.expand_dims(sitk.GetArrayFromImage(image), axis=0))
             gts.append(sitk.GetArrayFromImage(gt))
         images = np.array(images)
         gts = np.array(gts)
