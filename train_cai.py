@@ -141,11 +141,13 @@ def train():
     logger.log_to_file(os.path.join(
         output_dir, 'log_{}'.format(str(time.time()))))
     logger.info('Build data loader')
+    n_splits = gpc.config.N_SPLITS if gpc.config.N_SPLITS is not None else 5
     dataloaders, val_loader = get_synth_dhcp_dataloader(data_dir=gpc.config.DATA_DIR,
                                                         batch_size=gpc.config.BATCH_SIZE,
                                                         num_samples=50 if gpc.config.SMALL_DATA else None,
                                                         dual_modal=True if gpc.config.IN_CHANNELS == 2 else False,
-                                                        output_dir=output_dir,)
+                                                        output_dir=output_dir,
+                                                        n_splits=n_splits,)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
     #                out_channels=gpc.config.OUT_CHANNELS,
     #                f_maps=gpc.config.F_MAPS,
@@ -155,7 +157,7 @@ def train():
 
     # optim = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
 
-    for i in range(0, 5):
+    for i in range(0, n_splits):
         logger.info('Training fold {}'.format(i), ranks=[0])
         train_loader, test_loader = dataloaders[i]
         model = UNet3D(in_channels=gpc.config.IN_CHANNELS,

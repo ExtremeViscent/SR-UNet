@@ -8,10 +8,10 @@ import os
 def get_transform(**kwargs):
     return None
 
-def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output",**kwargs):
+def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_splits = 5,**kwargs):
     dataset = SynthdHCPDataset(data_dir,**kwargs)
     dataset_val = SynthdHCPDataset(data_dir,phase='val',**kwargs)
-    kfold = KFold(n_splits=5, shuffle=True)
+    kfold = KFold(n_splits=n_splits, shuffle=True)
     loaders = []
     for fold, (train_ids, test_ids) in enumerate(kfold.split(dataset)):
         if not os.path.exists(output_dir):
