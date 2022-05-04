@@ -14,3 +14,6 @@ output/
 nohup.out
 output_vanilla/
 output*/
+*.out
+*.nii
+*.nii.gz

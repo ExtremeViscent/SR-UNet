@@ -82,7 +82,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
                                 os.path.join(self.output_dir, 'image.nii.gz'))
             sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
                             os.path.join(self.output_dir, 'target.nii.gz'))
-            im_image = image[0, 1, 48, :, :]
+            im_image = image[0, 0, 48, :, :]
             im_target = target[0, 48, :, :]
             im_image = (im_image-np.min(im_image)) / \
                 (np.max(im_image)-np.min(im_image))*255
@@ -173,6 +173,7 @@ def train():
             hooks.SaveCheckpointHook(
                 checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}.pt'.format(i)),
                 model=model),
+            hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
             SaveAndEvalByEpochHook(
                 checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}'.format(i)),
                 output_dir=os.path.join(output_dir,'{}'.format(i)),
