@@ -17,3 +17,4 @@ output*/
 *.out
 *.nii
 *.nii.gz
+prepare_env_*
