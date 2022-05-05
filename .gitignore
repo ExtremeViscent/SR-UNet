@@ -14,7 +14,10 @@ output/
 nohup.out
 output_vanilla/
 output*/
+outfiles/
+experiments/
 *.out
 *.nii
+*.png
 *.nii.gz
 prepare_env_*
