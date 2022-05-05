@@ -161,7 +161,7 @@ class Abstract3DBUNet(Abstract3DUNet):
 
     def VAE_loss(self, im, im_hat):
 
-        im = im.squeeze()
+        # im = im.squeeze()
 
         mu, logvar = self.enc_mu, self.enc_logvar
         # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)

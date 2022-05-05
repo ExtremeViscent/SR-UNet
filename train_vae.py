@@ -83,7 +83,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
             sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
                             os.path.join(self.output_dir, 'target.nii.gz'))
             im_image = image[0, 0, 48, :, :]
-            im_target = target[0, 48, :, :]
+            im_target = target[0,0, 48, :, :]
             im_image = (im_image-np.min(im_image)) / \
                 (np.max(im_image)-np.min(im_image))*255
             im_target = (im_target-np.min(im_target)) / \
@@ -119,11 +119,13 @@ def train():
     logger.log_to_file(os.path.join(
         output_dir, 'log_{}'.format(str(time.time()))))
     logger.info('Build data loader')
+    n_splits = gpc.config.N_SPLITS if gpc.config.N_SPLITS is not None else 5
     dataloaders, val_loader = get_synth_dhcp_dataloader(data_dir=gpc.config.DATA_DIR,
                                                         batch_size=gpc.config.BATCH_SIZE,
                                                         num_samples=50 if gpc.config.SMALL_DATA else None,
                                                         dual_modal=True if gpc.config.IN_CHANNELS == 2 else False,
-                                                        output_dir=output_dir,)
+                                                        output_dir=output_dir,
+                                                        n_splits=n_splits,)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
     #                out_channels=gpc.config.OUT_CHANNELS,
     #                f_maps=gpc.config.F_MAPS,
@@ -167,7 +169,7 @@ def train():
 
         hook_list = [
             hooks.LossHook(),
-            # hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
+            hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
             hooks.LogMetricByEpochHook(logger),
             hooks.TensorboardHook(log_dir=os.path.join(output_dir,'logs','{}'.format(i))),
             hooks.SaveCheckpointHook(
