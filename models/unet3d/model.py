@@ -108,13 +108,13 @@ class Abstract3DBUNet(Abstract3DUNet):
         super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
-        self.mu = nn.Linear(8, latent_size)
-        self.logvar = nn.Linear(8, latent_size)
+        self.mu = nn.Linear(f_maps[-1], latent_size)
+        self.logvar = nn.Linear(f_maps[-1], latent_size)
         self.alpha = alpha
         self.logger = get_dist_logger()
         self.enc_mu = None
         self.enc_logvar = None
-        self.latent_to_decode = nn.Linear(latent_size, 8)
+        self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
 
     def forward(self, x):
         # encoder part
@@ -125,14 +125,17 @@ class Abstract3DBUNet(Abstract3DUNet):
             encoders_features.insert(0, x)
         # VAE part
         # x = x.view(x.size(0),-1)
-        mu = self.mu(x)
-        logvar = self.logvar(x)
+        _x = torch.transpose(x, 1, 4)
+        mu = self.mu(_x)
+        logvar = self.logvar(_x)
         self.kl = None
         self.mse = None
+
         self.enc_mu = mu
         self.enc_logvar = logvar
         sample = self.sample_from_mu_var(mu, logvar)
         x = self.latent_to_decode(sample)
+        x = torch.transpose(_x, 1, 4)
         # encoders_features.insert(2, x)
         # remove the last encoder's output from the list
         # !!remember: it's the 1st in the list
@@ -174,12 +177,10 @@ class Abstract3DBUNet(Abstract3DUNet):
         # err = im - im_hat
         # serr = torch.square(err)
         # sse = torch.sum(serr)
-
         mse = torch.nn.MSELoss()(im, im_hat)
         self.mse = mse
         self.kl = kl
-        # self.logger.info("MSE: {}".format(mse))
-        # self.logger.info("KL: {}".format(kl*self.alpha))
+        # self.logger.info(f"MSE: {mse}; KL: {kl*self.alpha}")
         FE_simple = mse + self.alpha * kl
         # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple
         #print('FE, mse:', mse)
@@ -197,7 +198,7 @@ class UNet3D(Abstract3DUNet):
     """
 
     def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
-                 num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, **kwargs):
+                 num_groups=8, num_levels=4, is_segmentation=True, conv_padding=1, alpha=0.00025, **kwargs):
         super(UNet3D, self).__init__(in_channels=in_channels,
                                      out_channels=out_channels,
                                      final_sigmoid=final_sigmoid,
@@ -209,6 +210,47 @@ class UNet3D(Abstract3DUNet):
                                      is_segmentation=is_segmentation,
                                      conv_padding=conv_padding,
                                      **kwargs)
+        self.alpha = alpha
+        self.kl = None
+        self.mse = None
+        self.warmup = True
+
+    def enable_VAE(self):
+        for encoder in self.encoders:
+            vae_block = encoder.basic_module.SingleConv1.VAE
+            vae_block.enable()
+            vae_block = encoder.basic_module.SingleConv2.VAE
+            vae_block.enable()      
+        for decoder in self.decoders:
+            vae_block = decoder.basic_module.SingleConv1.VAE
+            vae_block.enable()
+            vae_block = decoder.basic_module.SingleConv2.VAE
+            vae_block.enable()
+        self.warmup = False
+
+    # def forward(self, x):
+    #     if self.is_VAE:
+    #         return self.VAE_forward(x)
+    #     else:
+    #         return super(UNet3D, self).forward(x)
+
+    def VAE_loss(self, im, im_hat):
+        kl = 0
+        mse = torch.nn.MSELoss()(im, im_hat)
+        if self.warmup:
+            self.mse = mse
+            return mse
+        for encoder in self.encoders:
+            _kl = encoder.get_metrics()
+            kl+=_kl
+        kl = kl/len(self.encoders)
+        for decoder in self.decoders:
+            _kl = decoder.get_metrics()
+            kl+=_kl
+        kl = kl/len(self.decoders)
+        self.kl = kl
+        self.mse = mse
+        return mse + self.alpha * kl
 
 
 class BUNet3D(Abstract3DBUNet):

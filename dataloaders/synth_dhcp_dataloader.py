@@ -5,6 +5,8 @@ from datasets import SynthdHCPDataset
 from sklearn.model_selection import KFold
 import numpy as np
 import os
+import torchio as tio
+
 def get_transform(**kwargs):
     return None
 
@@ -22,10 +24,12 @@ def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_split
         test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
         trainloader = torch.utils.data.DataLoader(
                         dataset, 
-                        batch_size=batch_size, sampler=train_subsampler)
+                        batch_size=batch_size,
+                        sampler=train_subsampler)
         testloader = torch.utils.data.DataLoader(
                         dataset,
-                        batch_size=batch_size, sampler=test_subsampler)
+                        batch_size=batch_size, 
+                        sampler=test_subsampler)
         loaders.append((trainloader, testloader))
     val_sampler = torch.utils.data.SubsetRandomSampler(range(len(dataset_val)))
     valloader = torch.utils.data.DataLoader(

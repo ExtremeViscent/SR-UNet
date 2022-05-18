@@ -26,13 +26,45 @@ import os
 import time
 import numpy as np
 
+class VAESchedulerHook(colossalai.trainer.hooks.BaseHook):
+    def __init__(self, warmup_epochs=0, priority=10, **kwargs):
+        super().__init__(priority,**kwargs)
+        self.warmup_epochs = warmup_epochs
+        self.logger = get_dist_logger()
+    def before_train_epoch(self, trainer):
+        print(f"before_train_epoch {trainer.cur_epoch}")
+        if trainer.cur_epoch == self.warmup_epochs:
+            trainer.engine.model.model.enable_VAE()
+            self.logger.info("Enabled VAE")
+
+
+class AdvancedTBHook(hooks.TensorboardHook):
+    def _log_by_iter(self, trainer, mode: str):
+        super(AdvancedTBHook,self)._log_by_iter(trainer, mode)
+        if self._is_valid_rank_to_log:
+            model = trainer.engine.model.model
+            for idx,encoder in enumerate(model.encoders):                    
+                kl = encoder.get_metrics()
+                if kl is not None:
+                    self.writer.add_scalar(f'encoder{idx}/kl_loss', kl, trainer.cur_step)
+                # self.writer.add_scalar(f'encoder{idx}/mse', mse, trainer.cur_step)
+            for idx,decoder in enumerate(model.decoders):
+                kl = decoder.get_metrics()
+                if kl is not None:
+                    self.writer.add_scalar(f'decoder{idx}/kl', kl, trainer.cur_step)
+                # self.writer.add_scalar(f'decoder{idx}/mse', mse, trainer.cur_step)
+            kl = model.kl
+            mse = model.mse
+            if kl is not None:
+                self.writer.add_scalar(f'{mode}/kl', kl, trainer.cur_step)
+            # self.writer.add_scalar(f'kl/{mode}', kl, trainer.cur_step)
+            self.writer.add_scalar(f'mse/{mode}', mse, trainer.cur_step)
 
 class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
-    def __init__(self, checkpoint_dir, output_dir, dataloader, fold, priority=10):
+    def __init__(self, checkpoint_dir, output_dir,  fold, priority=10):
         super(SaveAndEvalByEpochHook, self).__init__(priority=priority)
         self.checkpoint_dir = checkpoint_dir
         self.output_dir = output_dir
-        self.dataloader = dataloader
         self.fold = fold
         self.image_dir = os.path.join(self.output_dir, 'images')
         self.target_dir = os.path.join(self.output_dir, 'targets')
@@ -59,7 +91,8 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
             os.makedirs(self.checkpoint_dir)
         torch.save(dict(state_dict=model.state_dict()),
                    os.path.join(self.checkpoint_dir, '{}.pth'.format(trainer.cur_epoch)))
-        image, target = self.dataloader.dataset.__getitem__(0)
+        image = np.load(os.path.join(self.output_dir, 'val_image.npy'))
+        target = np.load(os.path.join(self.output_dir, 'val_target.npy'))
         image = torch.tensor(image).unsqueeze(0).cuda()
         target = torch.tensor(target).unsqueeze(0).cuda()
         model.eval()
@@ -67,7 +100,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
         image = image.cpu().detach().numpy().astype(np.float32)
         target = target.cpu().detach().numpy().astype(np.float32)
         pred = pred.cpu().detach().numpy().astype(np.float32)
-        im_pred = pred[0, 0, 48, :, :]
+        im_pred = pred[0, 0, pred.shape[2]//2, :, :]
         im_pred = (im_pred-np.min(im_pred)) / \
             (np.max(im_pred)-np.min(im_pred))*255
         im_pred = Image.fromarray(im_pred).convert('RGB')
@@ -82,8 +115,8 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
                                 os.path.join(self.output_dir, 'image.nii.gz'))
             sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
                             os.path.join(self.output_dir, 'target.nii.gz'))
-            im_image = image[0, 0, 48, :, :]
-            im_target = target[0,0, 48, :, :]
+            im_image = image[0, 0, image.shape[2]//2, :, :]
+            im_target = target[0,0, image.shape[2]//2, :, :]
             im_image = (im_image-np.min(im_image)) / \
                 (np.max(im_image)-np.min(im_image))*255
             im_target = (im_target-np.min(im_target)) / \
@@ -122,10 +155,13 @@ def train():
     n_splits = gpc.config.N_SPLITS if gpc.config.N_SPLITS is not None else 5
     dataloaders, val_loader = get_synth_dhcp_dataloader(data_dir=gpc.config.DATA_DIR,
                                                         batch_size=gpc.config.BATCH_SIZE,
-                                                        num_samples=50 if gpc.config.SMALL_DATA else None,
-                                                        dual_modal=True if gpc.config.IN_CHANNELS == 2 else False,
+                                                        num_samples=gpc.config.NUM_SAMPLES,
+                                                        input_modalities=gpc.config.INPUT_MODALITIES,
+                                                        output_modalities=gpc.config.OUTPUT_MODALITIES,
                                                         output_dir=output_dir,
-                                                        n_splits=n_splits,)
+                                                        n_splits=n_splits,
+                                                        augmentation=gpc.config.AUGMENTATION,
+                                                        down_factor=gpc.config.DOWN_FACTOR,)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
     #                out_channels=gpc.config.OUT_CHANNELS,
     #                f_maps=gpc.config.F_MAPS,
@@ -138,15 +174,22 @@ def train():
     for i in range(0, 5):
         logger.info('Training fold {}'.format(i), ranks=[0])
         train_loader, test_loader = dataloaders[i]
-        model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
+        # model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
+        #                 out_channels=gpc.config.OUT_CHANNELS,
+        #                 f_maps=gpc.config.F_MAPS,
+        #                 layer_order='gczr',
+        #                 num_groups=min(1, gpc.config.F_MAPS[0]//2),
+        #                 is_segmentation=False,
+        #                 latent_size=gpc.config.LATENT_SIZE,
+        #                 alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.8)
+        model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
                         out_channels=gpc.config.OUT_CHANNELS,
                         f_maps=gpc.config.F_MAPS,
-                        layer_order='gcr',
-                        num_groups=8,
+                        layer_order='gczr',
+                        num_groups=min(1, gpc.config.F_MAPS[0]//2),
                         is_segmentation=False,
-                        latent_size=gpc.config.LATENT_SIZE,
-                        alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.8)
-
+                        alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025,
+                        )
         criterion = model.VAE_loss
         # criterion = torch.nn.MSELoss
         logger.info('Initializing K-Fold', ranks=[0])
@@ -167,11 +210,17 @@ def train():
             verbose=True,)
         logger.info("engine is built", ranks=[0])
 
+        val_image,val_target = val_loader.dataset.__getitem__(0)
+        if not os.path.exists(os.path.join(output_dir, '{}'.format(i))):
+            os.makedirs(os.path.join(output_dir, '{}'.format(i)))
+        np.save(os.path.join(output_dir,'{}'.format(i), 'val_image.npy'), val_image)
+        np.save(os.path.join(output_dir,'{}'.format(i), 'val_target.npy'), val_target)
+
         hook_list = [
             hooks.LossHook(),
             hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
             hooks.LogMetricByEpochHook(logger),
-            hooks.TensorboardHook(log_dir=os.path.join(output_dir,'logs','{}'.format(i))),
+            AdvancedTBHook(log_dir=os.path.join(output_dir,'logs','{}'.format(i))),
             hooks.SaveCheckpointHook(
                 checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}.pt'.format(i)),
                 model=model),
@@ -179,8 +228,8 @@ def train():
             SaveAndEvalByEpochHook(
                 checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}'.format(i)),
                 output_dir=os.path.join(output_dir,'{}'.format(i)),
-                dataloader=val_loader,
-                fold=i)
+                fold=i),
+            VAESchedulerHook(warmup_epochs=gpc.config.WARMUP_EPOCHS,),
         ]
         trainer = Trainer(engine=engine, logger=logger)
         # for epoch in range(gpc.config.NUM_EPOCHS):
