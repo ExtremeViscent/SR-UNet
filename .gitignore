@@ -21,3 +21,6 @@ experiments/
 *.png
 *.nii.gz
 prepare_env_*
+inference/*.pdf
+inference/*.png
+inference/*_structure
