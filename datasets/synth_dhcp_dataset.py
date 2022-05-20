@@ -28,23 +28,26 @@ class SynthdHCPDataset(Dataset):
         self.output_dual_modal = True if len(output_modalities) == 2 else False
         self.input_modalities = input_modalities
         self.output_modalities = output_modalities
-        self.list_labels = glob.glob(op.join(data_dir,'labels', '*.nii.gz'))
-        self.list_labels.sort()
-        self.list_images_t1 = [x.replace('_desc-drawem9_dseg.nii.gz', '_T1w_brain.nii.gz') for x in self.list_labels]
-        self.list_images_t2 = [x.replace('_desc-drawem9_dseg.nii.gz', '_T2w_brain.nii.gz') for x in self.list_labels]
-        self.list_images_t1 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T1w_brain_1mm.nii.gz') for x in self.list_images_t1]
-        self.list_images_t2 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T2w_brain_1mm.nii.gz') for x in self.list_images_t2]
-        self.list_images_t1 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t1')) for x in self.list_images_t1]
-        self.list_images_t2 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t2')) for x in self.list_images_t2]
-        self.list_basenames = [op.basename(x).split('_')[0] for x in self.list_images_t1]
-
         folder_name="preprocessed"
-        # for input_modality in input_modalities:
-        #     folder_name+=input_modality
-        # folder_name+="_"
-        # for output_modality in output_modalities:
-        #     folder_name+=output_modality
         self.preprocessed_path = op.join(data_dir, folder_name)
+        if op.exists(self.preprocessed_path):
+            self.list_basenames = sorted(glob.glob(op.join(self.preprocessed_path, '*.h5')))
+            self.list_basenames = [op.basename(x).split('.')[0] for x in self.list_basenames]
+            self.list_images_t1 = self.list_basenames
+            self.list_images_t2 = self.list_basenames
+            self.list_labels = self.list_basenames
+        else:
+            self.list_labels = glob.glob(op.join(data_dir,'labels', '*.nii.gz'))
+            self.list_labels.sort()
+            self.list_images_t1 = [x.replace('_desc-drawem9_dseg.nii.gz', '_T1w_brain.nii.gz') for x in self.list_labels]
+            self.list_images_t2 = [x.replace('_desc-drawem9_dseg.nii.gz', '_T2w_brain.nii.gz') for x in self.list_labels]
+            self.list_images_t1 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T1w_brain_1mm.nii.gz') for x in self.list_images_t1]
+            self.list_images_t2 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T2w_brain_1mm.nii.gz') for x in self.list_images_t2]
+            self.list_images_t1 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t1')) for x in self.list_images_t1]
+            self.list_images_t2 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t2')) for x in self.list_images_t2]
+            self.list_basenames = [op.basename(x).split('_')[0] for x in self.list_images_t1]
+
+
 
         assert (num_samples is None) or num_samples >= 10, "num_samples must be >= 10"
 
