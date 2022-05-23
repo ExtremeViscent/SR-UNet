@@ -1,18 +1,20 @@
 from sklearn import datasets
 import torch
 import torch.distributed as dist
-from datasets import SynthHCPDataset
+from datasets import SynthHCPDataset, SynthHCPDatasetTIO
 from sklearn.model_selection import KFold
 import numpy as np
 import os
 import torchio as tio
 
-def get_transform(**kwargs):
-    return None
 
-def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_splits = 5,**kwargs):
-    dataset = SynthHCPDataset(data_dir,**kwargs)
-    dataset_val = SynthHCPDataset(data_dir,phase='val',**kwargs)
+def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_splits = 5, tio = True,**kwargs):
+    if tio:
+        dataset = SynthHCPDatasetTIO(data_dir, **kwargs)
+        dataset_val = SynthHCPDatasetTIO(data_dir, **kwargs)
+    else:
+        dataset = SynthHCPDataset(data_dir,**kwargs)
+        dataset_val = SynthHCPDataset(data_dir,phase='val',**kwargs)
     kfold = KFold(n_splits=n_splits, shuffle=True)
     loaders = []
     for fold, (train_ids, test_ids) in enumerate(kfold.split(dataset)):
@@ -25,7 +27,7 @@ def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_split
         trainloader = torch.utils.data.DataLoader(
                         dataset, 
                         batch_size=batch_size,
-                        sampler=train_subsampler)
+                        sampler=train_subsampler,)
         testloader = torch.utils.data.DataLoader(
                         dataset,
                         batch_size=batch_size, 
