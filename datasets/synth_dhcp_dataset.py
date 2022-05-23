@@ -169,61 +169,106 @@ class SynthdHCPDataset(Dataset):
             
         self.images = np.array(images)
         self.gts = np.array(gts)
-        # np.save(image_save_path, images)
-        # np.save(gt_save_path, gts)
+
+class SynthdHCPDatasetTIO(tio.SubjectsDataset):
+    def __init__(self, data_dir, phase="train", num_samples=None, input_modalities=['t1'], output_modalities=['t1'], augmentation=False,down_factor=5):
+        self.data_dir = data_dir
+        self.phase = phase
+        self.augmentation = augmentation
+        self.down_factor = down_factor
+        self.input_dual_modal = True if len(input_modalities) == 2 else False
+        self.output_dual_modal = True if len(output_modalities) == 2 else False
+        self.input_modalities = input_modalities
+        self.output_modalities = output_modalities
+        folder_name="preprocessed"
+        self.preprocessed_path = op.join(data_dir, folder_name)
+        assert op.exists(self.preprocessed_path), "Path {} does not exist".format(self.preprocessed_path)
+        self.list_basenames = sorted(glob.glob(op.join(self.preprocessed_path, '*_t1.nii.gz')))
+        self.list_basenames = [op.basename(x).split('_')[0] for x in self.list_basenames]
+        assert (num_samples is None) or num_samples >= 10, "num_samples must be >= 10"
+
+        if num_samples is None:
+            self.num_samples = len(self.list_basenames)
+        else:
+            self.num_samples = num_samples
+        if not self.list_basenames:
+            raise RuntimeError(f'No input file found in {data_dir}, make sure you put your images there')
+        if phase == "train":
+            self.list_basenames = self.list_basenames[:int(0.8 * self.num_samples)]
+            self.num_samples = int(0.8 * self.num_samples)
+        elif phase == "val":
+            self.list_basenames = self.list_basenames[int(0.8 * self.num_samples):self.num_samples]
+            self.num_samples = int(0.2 * self.num_samples)
+        logging.info(f'Creating dataset with {self.num_samples} examples')
+        logging.info(f'length of list_images_t1: {len(self.list_basenames)}')
+
+        spacing = [1.0,1.0,1.0]
+        spacing = np.array(spacing)
+        spacing *= 8
+        target_shape = (108, 145, 145)
+        factor = spacing[2] / spacing[0]
+        aniso_transform = tio.RandomAnisotropy(axes=2, downsampling=10)
+        resize_transform = tio.Resize(target_shape=target_shape)
+        resample_transform = tio.Resample(target=spacing)
+        blur_transform = tio.RandomBlur(6)
+        augmentation_transform = []
+        augmentation_transform.append(tio.RandomFlip(axes=(0,1)))
+        augmentation_transform.append(tio.RandomAffine())
+        augmentation_transform.append(tio.RandomElasticDeformation())
+        augmentation_transform.append(tio.RandomMotion())
+        augmentation_transform.append(tio.RandomBiasField())
+        augmentation_transform.append(tio.RandomSwap())
+        augmentation_transform.append(resample_transform)
+        augmentation_transform.append(resize_transform)
+        augmentation_transform.append(blur_transform)
+        augmentation_transform = tio.Compose(augmentation_transform)
+        self.transform  = augmentation_transform
+        self.transform.keep = {'t1': 'gt_t1', 't2': 'gt_t2'}
+        self.subjects=[]
+
+
+        self.load()
+        super().__init__(self.subjects, transform=self.transform,load_getitem=True)
 
 
 
-        # for idx in trange(0, self.max_id) if phase == "train" else trange(self.max_id-self.num_samples, self.max_id):
-        #     if os.path.exists(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz')):
-        #         image = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz'))
-        #         gt = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_target.nii.gz'))
-        #         # label = sitk.ReadImage(op.join(data_dir, str(idx) + '_label.nii.gz'))
-        #         images.append(np.expand_dims(sitk.GetArrayFromImage(image), axis=0))
-        #         gts.append(sitk.GetArrayFromImage(gt))
-        #         num_samples+=1
-        # self.num_samples = num_samples
-        # images = np.array(images)
-        # gts = np.array(gts)
-        # self.images = images
-        # self.gts = gts
 
-    # def load_aug(self, data_dir, phase="train"):
-    #     images = []
-    #     gts = []
-    #     num_samples=0
-    #     spacing = (1.5, 1.5, 5.0)
-    #     factor = spacing[2] / spacing[0]
-    #     transform = tio.RandomAnisotropy(axes=2, downsampling=factor)
-    #     for idx in trange(0, self.max_id) if phase == "train" else trange(self.max_id-self.num_samples, self.max_id):
-    #         if os.path.exists(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz')):
-    #             image = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz'))
-    #             images.append(np.expand_dims(sitk.GetArrayFromImage(image), axis=0))
-    #             gts.append(np.expand_dims(sitk.GetArrayFromImage(image), axis=0))
-    #             num_samples+=1
-    #     self.num_samples = num_samples
-    #     images = np.array(images)
-    #     gts = np.array(gts)
-    #     self.images = images
-    #     self.gts = gts
+    def __getitem__(self, idx):
+        # with h5.File(self.preprocessed_path + f"/{self.list_basenames[idx]}.h5", 'r') as f:
+        #     image = f['image'][:]
+        #     gt = f['gt'][:]
+        # print('getting item'+str(idx))
+        subject = super().__getitem__(idx)
+
+        images = []
+        gts = []
+        for modality in self.input_modalities:
+            images.append(subject[modality].data.numpy()[0])
+        for modality in self.output_modalities:
+            gts.append(subject['gt_'+modality].data.numpy()[0])
+        image = np.array(images).astype(np.float32)
+        gt = np.array(gts).astype(np.float32)
+        # print('item'+str(idx)+' done')
+        return image, gt
 
 
-    # def load_dual_modal(self, data_dir, phase="train"):
-    #     images = []
-    #     gts = []
-    #     num_samples=0
-    #     for idx in trange(0, self.max_id) if phase == "train" else trange(self.max_id-self.num_samples, self.max_id):
-    #         if os.path.exists(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz')):
-    #             image_t1 = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image_t1.nii.gz'))
-    #             image_t2 = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_image_t2.nii.gz'))
-    #             image = np.stack([sitk.GetArrayFromImage(image_t1), sitk.GetArrayFromImage(image_t2)], axis=0)
-    #             gt = sitk.ReadImage(op.join(data_dir, str(f"{idx:04d}") + '_target.nii.gz'))
-    #             # label = sitk.ReadImage(op.join(data_dir, str(idx) + '_label.nii.gz'))
-    #             images.append(image)
-    #             gts.append(sitk.GetArrayFromImage(gt))
-    #             num_samples+=1
-    #     self.num_samples = num_samples
-    #     images = np.array(images)
-    #     gts = np.array(gts)
-    #     self.images = images
-    #     self.gts = gts
+
+
+    def _load(self,basename):
+
+        img_t1_pth = op.join(self.data_dir, 'preprocessed',basename+'_t1.nii.gz')
+        img_t2_pth = op.join(self.data_dir, 'preprocessed',basename+'_t2.nii.gz')
+        img_t1 = tio.ScalarImage(img_t1_pth)
+        img_t2 = tio.ScalarImage(img_t2_pth)
+        subject = tio.Subject(
+            t1 = img_t1,
+            t2 = img_t2,
+            id = basename,
+        )
+        return subject
+
+        
+
+    def load(self):
+        ret = thread_map(self._load,self.list_basenames, max_workers=32, total=self.num_samples)
+        self.subjects = ret
