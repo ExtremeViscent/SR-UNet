@@ -8,7 +8,7 @@ import os
 import torchio as tio
 
 
-def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_splits = 5, tio = True,**kwargs):
+def get_dataloader(data_dir=None,batch_size:int=1,output_dir="./output", n_splits = 5, tio = False,**kwargs):
     if tio:
         dataset = SynthdHCPDatasetTIO(data_dir, **kwargs)
         dataset_val = SynthdHCPDatasetTIO(data_dir, **kwargs)

@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/media/hdd/dhcp/dhcp_lores'
+data_dir = '/scratch/users/k21113539/dhcp_lores'
 list_basenames = glob.glob(op.join(data_dir,'labels', '*.nii.gz'))
 list_basenames.sort()
 print(len(list_basenames))

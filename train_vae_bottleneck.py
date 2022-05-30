@@ -172,8 +172,9 @@ def train():
         print("Launch mode not supported")
     logger = get_dist_logger()
     output_dir = gpc.config.OUTPUT_DIR
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    if gpc.get_global_rank() == 0:
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
     logger.log_to_file(os.path.join(
         output_dir, 'log_{}'.format(str(time.time()))))
     logger.info('Build data loader')
@@ -210,22 +211,24 @@ def train():
     for i in range(0, 5):
         logger.info('Training fold {}'.format(i), ranks=[0])
         train_loader, test_loader = dataloaders[i]
-        model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
-                        out_channels=gpc.config.OUT_CHANNELS,
-                        f_maps=gpc.config.F_MAPS,
-                        layer_order='gczr',
-                        num_groups=min(1, gpc.config.F_MAPS[0]//2),
-                        is_segmentation=False,
-                        latent_size=gpc.config.LATENT_SIZE,
-                        alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
-        # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
-        #                 out_channels=gpc.config.OUT_CHANNELS,
-        #                 f_maps=gpc.config.F_MAPS,
-        #                 layer_order='gczr',
-        #                 num_groups=min(1, gpc.config.F_MAPS[0]//2),
-        #                 is_segmentation=False,
-        #                 alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025,
-        #                 )
+        vae = getattr(gpc.config, 'VAE', True)
+        if vae:
+            model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
+                            out_channels=gpc.config.OUT_CHANNELS,
+                            f_maps=gpc.config.F_MAPS,
+                            layer_order='gcr',
+                            num_groups=min(1, gpc.config.F_MAPS[0]//2),
+                            is_segmentation=False,
+                            latent_size=gpc.config.LATENT_SIZE,
+                            alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
+        else:
+            model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
+                            out_channels=gpc.config.OUT_CHANNELS,
+                            f_maps=gpc.config.F_MAPS,
+                            layer_order='gcr',
+                            num_groups=min(1, gpc.config.F_MAPS[0]//2),
+                            is_segmentation=False,
+                            )
         criterion = model.VAE_loss
         # criterion = torch.nn.MSELoss
         logger.info('Initializing K-Fold', ranks=[0])
