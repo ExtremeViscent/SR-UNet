@@ -109,14 +109,24 @@ class SynthdHCPDataset(Dataset):
         img_t1, img_t2, gt, basename = x
         if op.exists(op.join(self.preprocessed_path, basename + '.h5')):
             with h5.File(op.join(self.preprocessed_path, basename + '.h5'), 'r') as f:
-                if self.input_dual_modal:
-                    image = np.stack(f['image_t1'][:], f['image_t2'][:])
-                else:
-                    image = np.expand_dims(f['image_{}'.format(self.input_modalities[0])][:], axis=0)
-                if self.output_dual_modal:
-                    gt = np.stack(f['gt_t1'][:], f['gt_t2'][:])
-                else:
-                    gt = np.expand_dims(f['gt_{}'.format(self.output_modalities[0])][:], axis=0)
+                image = []
+                for modality in self.input_modalities:
+                    image.append(f['image_'+modality][:])
+                image = np.array(image)
+                gt = []
+                for modality in self.output_modalities:
+                    gt.append(f['gt_'+modality][:])
+                gt = np.array(gt)
+                # if self.input_dual_modal:
+                #     image = np.stack(f['image_t1'][:], f['image_t2'][:])
+                # else:
+                #     image = np.expand_dims(f['image_{}'.format(self.input_modalities[0])][:], axis=0)
+                # if self.output_dual_modal:
+                #     gt = np.stack(f['gt_t1'][:], f['gt_t2'][:])
+                # else:
+                #     gt = np.expand_dims(f['gt_{}'.format(self.output_modalities[0])][:], axis=0)
+                image = image.astype(np.float32)
+                gt = gt.astype(np.float32)
             return image, gt
         image_t1 = sitk.ReadImage(img_t1)
         image_t2 = sitk.ReadImage(img_t2)
@@ -198,6 +208,7 @@ class SynthdHCPDatasetTIO(tio.SubjectsDataset):
             self.num_samples = int(0.8 * self.num_samples)
         elif phase == "val":
             self.list_basenames = self.list_basenames[int(0.8 * self.num_samples):self.num_samples]
+            self.augmentation = False
             self.num_samples = int(0.2 * self.num_samples)
         logging.info(f'Creating dataset with {self.num_samples} examples')
         logging.info(f'length of list_images_t1: {len(self.list_basenames)}')
@@ -219,17 +230,23 @@ class SynthdHCPDatasetTIO(tio.SubjectsDataset):
             augmentation_transform.append(tio.RandomMotion())
             augmentation_transform.append(tio.RandomBiasField())
             augmentation_transform.append(tio.RandomSwap())
-        augmentation_transform.append(resample_transform)
-        augmentation_transform.append(resize_transform)
-        augmentation_transform.append(blur_transform)
-        augmentation_transform = tio.Compose(augmentation_transform)
+            # augmentation_transform.append(resample_transform)
+            # augmentation_transform.append(resize_transform)
+            # augmentation_transform.append(blur_transform)
+            augmentation_transform = tio.Compose(augmentation_transform)
+            self.transform.keep = {'t1': 'gt_t1', 't2': 'gt_t2'}
+        else:
+            self.augmentation = None
+            
         self.transform  = augmentation_transform
-        self.transform.keep = {'t1': 'gt_t1', 't2': 'gt_t2'}
         self.subjects=[]
 
 
         self.load()
-        super().__init__(self.subjects, transform=self.transform,load_getitem=True)
+        if self.augmentation:
+            super().__init__(self.subjects, transform=self.transform,load_getitem=True)
+        else:
+            super().__init__(self.subjects,load_getitem=True)
 
 
 
@@ -259,11 +276,17 @@ class SynthdHCPDatasetTIO(tio.SubjectsDataset):
 
         img_t1_pth = op.join(self.data_dir, 'preprocessed',basename+'_t1.nii.gz')
         img_t2_pth = op.join(self.data_dir, 'preprocessed',basename+'_t2.nii.gz')
+        gt_t1_pth = op.join(self.data_dir, 'preprocessed',basename+'_gt_t1.nii.gz')
+        gt_t2_pth = op.join(self.data_dir, 'preprocessed',basename+'_gt_t2.nii.gz')
         img_t1 = tio.ScalarImage(img_t1_pth)
         img_t2 = tio.ScalarImage(img_t2_pth)
+        gt_t1 = tio.ScalarImage(gt_t1_pth)
+        gt_t2 = tio.ScalarImage(gt_t2_pth)
         subject = tio.Subject(
             t1 = img_t1,
             t2 = img_t2,
+            gt_t1 = gt_t1,
+            gt_t2 = gt_t2,
             id = basename,
         )
         return subject

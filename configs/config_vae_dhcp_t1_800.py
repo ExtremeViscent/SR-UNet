@@ -3,7 +3,7 @@ import os
 
 DATA_DIR="/scratch/users/k21113539/dhcp_lores"
 OUTPUT_DIR="/scratch/users/k21113539/SR-UNet/experiments/output_vae_dhcp_t1_800"
-AUGMENTATION=True
+AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
 BATCH_SIZE=6
