@@ -303,10 +303,14 @@ class Encoder(nn.Module):
                                          padding=padding)
 
     def get_metrics(self):
-        module = self.basic_module.SingleConv1.VAE
-        kl = module.kl
-        # mse = module.mse
-        return kl
+        #check if VAE layer is present
+        if hasattr(self.basic_module, 'VAE'):
+            module = self.basic_module.SingleConv1.VAE
+            kl = module.kl
+            # mse = module.mse
+            return kl
+        else:
+            return None
 
     def forward(self, x):
         if self.pooling is not None:
@@ -372,10 +376,13 @@ class Decoder(nn.Module):
         return x
 
     def get_metrics(self):
-        module = self.basic_module.SingleConv1.VAE
-        kl = module.kl
-        # mse = module.mse
-        return kl
+        if hasattr(self.basic_module, 'VAE'):
+            module = self.basic_module.SingleConv1.VAE
+            kl = module.kl
+            # mse = module.mse
+            return kl
+        else:
+            return None
         
     @staticmethod
     def _joining(encoder_features, x, concat):
