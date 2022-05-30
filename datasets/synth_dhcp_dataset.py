@@ -28,7 +28,7 @@ class SynthdHCPDataset(Dataset):
         self.output_dual_modal = True if len(output_modalities) == 2 else False
         self.input_modalities = input_modalities
         self.output_modalities = output_modalities
-        folder_name="preprocessed"
+        folder_name="preprocessed_h5"
         self.preprocessed_path = op.join(data_dir, folder_name)
         if op.exists(self.preprocessed_path):
             self.list_basenames = sorted(glob.glob(op.join(self.preprocessed_path, '*.h5')))
