@@ -56,7 +56,7 @@ class AdvancedTBHook(hooks.TensorboardHook):
             kl = model.kl
             mse = model.mse
             if kl is not None:
-                self.writer.add_scalar(f'{mode}/kl', kl, trainer.cur_step)
+                self.writer.add_scalar(f'kl/{mode}', kl, trainer.cur_step)
             # self.writer.add_scalar(f'kl/{mode}', kl, trainer.cur_step)
             self.writer.add_scalar(f'mse/{mode}', mse, trainer.cur_step)
 
