@@ -185,6 +185,7 @@ class Abstract3DBUNet(Abstract3DUNet):
         # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple
         #print('FE, mse:', mse)
         #print('FE, kl:', kl)
+        return mse
         return FE_simple
 
 
