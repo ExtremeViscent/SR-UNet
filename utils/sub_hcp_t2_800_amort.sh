@@ -1,17 +1,17 @@
 #!/bin/bash
-#SBATCH --output=/scratch/users/%u/dhcp_800_%j.out
+#SBATCH --output=/scratch/users/%u/hcp_t2_amort_%j.out
 #SBATCH --job-name=bunet-dhcp
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
 #SBATCH -N 1
-#SBATCH -n 9
+#SBATCH -n 36
 #SBATCH -t 24:00:00
 
 
 export MASTER_PORT=11451
-export WORLD_SIZE=1
-export NPROC_PER_NODE=1
+export WORLD_SIZE=8
+export NPROC_PER_NODE=4
 export RANK=$SLURM_PROCID
 export LOCAL_RANK=$SLURM_LOCALID
 export NNODES=$SLURM_JOB_NUM_NODES
@@ -32,6 +32,6 @@ conda activate cai
 nvidia-smi
 
 cd /scratch/users/k21113539/SR-UNet
-torchrun /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_dhcp_t1_800.py
+torchrun --nproc_per_node 4 /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_hcp_t2_800_amort.py
 # torchrun --nnodes $NNODES --master_addr $MASTER_ADDR --master_port $MASTER_PORT --node_rank $NODE_RANK --nproc_per_node $NPROC_PER_NODE /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_hcp_t1.py
 # srun -p gpu -N 2 --gres=gpu:4 --ntasks-per-node=4 python /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_hcp_t1.py
