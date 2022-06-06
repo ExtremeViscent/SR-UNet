@@ -1,17 +1,18 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR="/scratch/users/k21113539/dhcp_lores"
-OUTPUT_DIR="/scratch/users/k21113539/SR-UNet/experiments/output_vae_dbg"
+DATA_DIR="/media/hdd/dhcp/dhcp_lores"
+OUTPUT_DIR="/media/hdd/viscent/SR-UNet/experiments/output_unet_dhcp_dbg"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
-BATCH_SIZE=3
+BATCH_SIZE=2
 IN_CHANNELS=1
 OUT_CHANNELS=1
-NUM_EPOCHS=200
+NUM_EPOCHS=800
 N_SPLITS=5
 F_MAPS=[16, 32, 64, 128, 256]
+VAE = False
 
 WARMUP_EPOCHS=10
 LR=0.001
@@ -25,11 +26,11 @@ NNODES=1
 NGPUS_PER_NODE=1
 WORLD_SIZE=NNODES*NGPUS_PER_NODE
 
-fp16=dict(
-    mode=AMP_TYPE.TORCH
-)
+# fp16=dict(
+#     mode=AMP_TYPE.TORCH
+# )
 
-parallel = dict(
-    data=dict(size=WORLD_SIZE),
-    tensor=dict(mode='1d', size=WORLD_SIZE),
-)
+# parallel = dict(
+#     data=dict(size=WORLD_SIZE),
+#     tensor=dict(mode='1d', size=WORLD_SIZE),
+# )

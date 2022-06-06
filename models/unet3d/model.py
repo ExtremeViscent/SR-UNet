@@ -1,3 +1,4 @@
+from copy import deepcopy
 import torch.nn as nn
 import torch
 import torch.optim as optim
@@ -125,9 +126,10 @@ class Abstract3DBUNet(Abstract3DUNet):
             encoders_features.insert(0, x)
         # VAE part
         # x = x.view(x.size(0),-1)
-        _x = torch.transpose(x, 1, 4)
-        mu = self.mu(_x)
-        logvar = self.logvar(_x)
+        encoders_features = encoders_features[1:]
+        x = torch.transpose(x, 1, 4)
+        mu = self.mu(x)
+        logvar = self.logvar(x)
         self.kl = None
         self.mse = None
 
@@ -135,7 +137,8 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.enc_logvar = logvar
         sample = self.sample_from_mu_var(mu, logvar)
         x = self.latent_to_decode(sample)
-        x = torch.transpose(_x, 1, 4)
+        x = torch.transpose(x, 1, 4)
+        encoders_features.insert(0, x)
         # encoders_features.insert(2, x)
         # remove the last encoder's output from the list
         # !!remember: it's the 1st in the list
