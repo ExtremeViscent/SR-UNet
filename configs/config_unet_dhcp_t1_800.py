@@ -1,7 +1,7 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR="/scratch/users/k21113539/dhcp_lores"
+DATA_DIR="/scratch/prj/bayunet/dhcp_lores"
 OUTPUT_DIR="/scratch/users/k21113539/SR-UNet/experiments/output_unet_dhcp_t1_800"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
@@ -24,15 +24,15 @@ DOWN_FACTOR = 5
 DATASET='dHCP'
 
 
-NNODES=1
-NGPUS_PER_NODE=2
-WORLD_SIZE=NNODES*NGPUS_PER_NODE
+# NNODES=1
+# NGPUS_PER_NODE=2
+# WORLD_SIZE=NNODES*NGPUS_PER_NODE
 
-fp16=dict(
-    mode=AMP_TYPE.TORCH
-)
+# fp16=dict(
+#     mode=AMP_TYPE.TORCH
+# )
 
-parallel = dict(
-    data=dict(size=WORLD_SIZE),
-    tensor=dict(mode='1d', size=WORLD_SIZE),
-)
+# parallel = dict(
+#     data=dict(size=WORLD_SIZE),
+#     tensor=dict(mode='1d', size=WORLD_SIZE),
+# )
