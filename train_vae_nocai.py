@@ -1,3 +1,4 @@
+from cmath import phase
 from datetime import date
 from sched import scheduler
 import torch
@@ -21,11 +22,23 @@ import importlib
 import SimpleITK as sitk
 from PIL import Image
 
-
+from torch.utils.tensorboard import SummaryWriter
 import os
+import os.path as op
 import time
 from tqdm import tqdm
 import numpy as np
+
+class TensorBoardLogger():
+    def __init__(self, log_dir, **kwargs):
+        self.log_dir = log_dir
+        self.writer = SummaryWriter(log_dir, **kwargs)
+        
+    
+    def __call__(self, phase, step, **kwargs):
+        for key, value in kwargs.items():
+            self.writer.add_scalar(f'{key}/{phase}', value, step)
+        
 
 def eval(model, cur_epoch,fold):
     output_dir = gpc.config.OUTPUT_DIR
@@ -34,6 +47,8 @@ def eval(model, cur_epoch,fold):
     pred_dir = os.path.join(output_dir, 'preds')
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
+    if not os.path.exists(pred_dir):
+        os.makedirs(pred_dir)
     ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
     torch.save(dict(state_dict=model.state_dict()),ckpt_path)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
@@ -81,6 +96,8 @@ def eval(model, cur_epoch,fold):
         im_target.save(os.path.join(output_dir, 'target.png'))
     sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
                     os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
+    if not os.path.exists(os.path.join(pred_dir, '2d')):
+        os.makedirs(os.path.join(pred_dir, '2d'))
     im_pred.save(os.path.join(pred_dir, "2d",
                     '{}.png'.format(cur_epoch)))
 
@@ -153,49 +170,15 @@ def train():
         )
         lr_scheduler = CosineAnnealingLR(
             optim, gpc.config.NUM_EPOCHS*(train_loader.__len__()//gpc.config.BATCH_SIZE))
-
+        TBLogger = TensorBoardLogger(log_dir = op.join(output_dir,'{}'.format(i), 'tb_logs'),comment='fold_{}'.format(i))
         val_image,val_target = val_loader.dataset.__getitem__(0)
         if not os.path.exists(os.path.join(output_dir, '{}'.format(i))):
             os.makedirs(os.path.join(output_dir, '{}'.format(i)))
         np.save(os.path.join(output_dir,'{}'.format(i), 'val_image.npy'), val_image)
         np.save(os.path.join(output_dir,'{}'.format(i), 'val_target.npy'), val_target)
 
-        # hook_list = [
-        #     hooks.LossHook(),
-        #     hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
-        #     hooks.LogMetricByEpochHook(logger),
-        #     # AdvancedTBHook(log_dir=os.path.join(output_dir,'logs','{}'.format(i))),
-        #     hooks.SaveCheckpointHook(
-        #         checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}.pt'.format(i)),
-        #         model=model),
-        #     hooks.LRSchedulerHook(lr_scheduler=lr_scheduler, by_epoch=True),
-        #     SaveAndEvalByEpochHook(
-        #         checkpoint_dir=os.path.join(output_dir, 'checkpoints', 'fold_{}'.format(i)),
-        #         output_dir=os.path.join(output_dir,'{}'.format(i)),
-        #         fold=i),
-        #     # VAESchedulerHook(warmup_epochs=gpc.config.WARMUP_EPOCHS,),
-        # ]
-        # trainer = Trainer(engine=engine, logger=logger)
-        # for epoch in range(gpc.config.NUM_EPOCHS):
-        #     engine.train()
-        #     for im,gt in train_loader:
-        #         im=im.cuda()
-        #         gt=gt.cuda()
-        #         engine.zero_grad()
-        #         output = engine(im)
-        #         loss = criterion(output, gt)
-        #         engine.backward(loss)
-        #         engine.step()
-
-        # trainer.fit(
-        #     train_dataloader=train_dataloader,
-        #     hooks=hook_list,
-        #     epochs=gpc.config.NUM_EPOCHS,
-        #     test_dataloader=test_dataloader,
-        #     test_interval=1,
-        #     display_progress=True
-        # )
         model.cuda()
+        n_step = 0
         for epoch in range(gpc.config.NUM_EPOCHS):
             model.train()
             for im,gt in tqdm(train_loader):
@@ -204,6 +187,7 @@ def train():
                 optim.zero_grad()
                 output = model(im)
                 loss = criterion(output, gt)
+                TBLogger(phase='train', step=epoch,loss=loss)
                 loss.backward()
                 optim.step()
             logger.info('Epoch {}/{}'.format(epoch, gpc.config.NUM_EPOCHS), ranks=[0])
@@ -215,6 +199,7 @@ def train():
                     gt=gt.cuda()
                     output = model(im)  
                     loss = criterion(output, gt)
+                    TBLogger(phase='test', step=epoch,loss=loss)
             logger.info('epoch:{}/{}'.format(epoch,gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Test loss:{}'.format(loss), ranks=[0])
             eval(model,epoch,i)
