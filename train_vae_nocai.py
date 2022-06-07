@@ -146,6 +146,7 @@ def train():
                                                             n_splits=n_splits,
                                                             augmentation=gpc.config.AUGMENTATION,
                                                             down_factor=gpc.config.DOWN_FACTOR,)
+    WARMUP_EPOCHS = getattr(gpc.config, 'WARMUP_EPOCHS', None)
     for i in range(0, 5):
         logger.info('Training fold {}'.format(i), ranks=[0])
         train_loader, test_loader = dataloaders[i]
@@ -159,8 +160,6 @@ def train():
                             is_segmentation=False,
                             latent_size=gpc.config.LATENT_SIZE,
                             alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
-            criterion = model.VAE_loss
-            logger.info('Using VAE loss')
         else:
             model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
                             out_channels=gpc.config.OUT_CHANNELS,
@@ -169,6 +168,10 @@ def train():
                             num_groups=min(1, gpc.config.F_MAPS[0]//2),
                             is_segmentation=False,
                             )
+        if WARMUP_EPOCHS is None and vae:
+            criterion = model.VAE_loss
+            logger.info('Using VAE loss')
+        else:
             criterion = torch.nn.MSELoss()
             logger.info('Using MSE loss')
         logger.info('Initializing K-Fold', ranks=[0])
@@ -188,17 +191,26 @@ def train():
 
         model.cuda()
         n_step = 0
+        n_step_test = 0
+
+
         for epoch in range(gpc.config.NUM_EPOCHS):
             model.train()
+            if WARMUP_EPOCHS is not None and epoch == WARMUP_EPOCHS:
+                criterion = model.VAE_loss
+                logger.info('Using VAE loss', ranks=[0])
             for im,gt in tqdm(train_loader):
                 im=im.cuda()
                 gt=gt.cuda()
                 optim.zero_grad()
                 output = model(im)
                 loss = criterion(output, gt)
-                TBLogger(phase='train', step=epoch,loss=loss)
+                TBLogger(phase='train', step=n_step,loss=loss)
+                if getattr(model,'kl') is not None:
+                    TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse)
                 loss.backward()
                 optim.step()
+                n_step+=1
             logger.info('Epoch {}/{}'.format(epoch, gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Train Loss: {:.4f}'.format(loss.item()), ranks=[0])
             model.eval()
@@ -208,9 +220,17 @@ def train():
                     gt=gt.cuda()
                     output = model(im)  
                     loss = criterion(output, gt)
-                    TBLogger(phase='test', step=epoch,loss=loss)
+                    TBLogger(phase='test', step=n_step_test,loss=loss)
+                    if getattr(model,'kl') is not None:
+                        TBLogger(phase='test', step=n_step_test,KL=model.kl,MSE=model.mse)
+                    n_step_test+=1
             logger.info('epoch:{}/{}'.format(epoch,gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Test loss:{}'.format(loss), ranks=[0])
+            if getattr(model,'kl') is not None:
+                logger.info('KL:{}'.format(model.kl), ranks=[0])
+                logger.info('MSE:{}'.format(model.mse), ranks=[0])
+                logger.info('Average mu:{}'.format(model.enc_mu.mean()), ranks=[0])
+                logger.info('Average logvar:{}'.format(model.enc_logvar.mean()), ranks=[0])
             eval(model,epoch,i)
 
             
