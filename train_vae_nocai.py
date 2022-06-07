@@ -49,8 +49,10 @@ def eval(model, cur_epoch,fold):
         os.makedirs(checkpoint_dir)
     if not os.path.exists(pred_dir):
         os.makedirs(pred_dir)
-    ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
+    ckpt_path = os.path.join(checkpoint_dir, '{}_sd.pth'.format(cur_epoch))
     torch.save(dict(state_dict=model.state_dict()),ckpt_path)
+    ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
+    torch.save(model,ckpt_path)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
     #                 out_channels=gpc.config.OUT_CHANNELS,
     #                 f_maps=gpc.config.F_MAPS,
@@ -110,7 +112,14 @@ def train():
 
     if args.config is None:
         args.config = './config.py'
-    colossalai.launch(args.config,0,1,'localhost',11451)
+    port = 11451
+    success = False
+    while not success:
+        try:
+            colossalai.launch(args.config,0,1,'localhost',port)
+            success = True
+        except:
+            port+=1
     logger = get_dist_logger()
     output_dir = gpc.config.OUTPUT_DIR
     if not os.path.exists(output_dir):

@@ -28,14 +28,14 @@ class SynthHCPDataset(Dataset):
         self.output_dual_modal = True if len(output_modalities) == 2 else False
         self.input_modalities = input_modalities
         self.output_modalities = output_modalities
-
-        self.list_dir = glob.glob(op.join(data_dir,'preprocessed', '*.h5'))
+        folder_name="preprocessed_h5"
+        self.list_dir = glob.glob(op.join(data_dir,folder_name, '*.h5'))
         self.list_dir.sort()
-        self.list_basenames = [op.basename(x) for x in self.list_dir]
+        self.list_basenames = [op.basename(x).split('.')[0] for x in self.list_dir]
 
 
 
-        folder_name="preprocessed"
+        
         self.preprocessed_path = op.join(data_dir, folder_name)
 
         assert (num_samples is None) or num_samples >= 10, "num_samples must be >= 10"
@@ -90,18 +90,28 @@ class SynthHCPDataset(Dataset):
 
 
     def _load(self,basename):
-        with h5.File(op.join(self.data_dir,'preprocessed', basename), 'r') as f:
-            if self.input_dual_modal:
-                image = np.stack(f['image_t1'][:], f['image_t2'][:])
-            else:
-                image = np.expand_dims(f['image_{}'.format(self.input_modalities[0])][:], axis=0)
-            if self.output_dual_modal:
-                gt = np.stack(f['gt_t1'][:], f['gt_t2'][:])
-            else:
-                gt = np.expand_dims(f['gt_{}'.format(self.output_modalities[0])][:], axis=0)
-            image = image.astype(np.float32)
-            gt = gt.astype(np.float32)
-        return image, gt
+        # print(op.join(self.preprocessed_path, basename + '.h5'))
+        if op.exists(op.join(self.preprocessed_path, basename + '.h5')):
+            with h5.File(op.join(self.preprocessed_path, basename + '.h5'), 'r') as f:
+                image = []
+                for modality in self.input_modalities:
+                    image.append(f['image_'+modality][:])
+                image = np.array(image)
+                gt = []
+                for modality in self.output_modalities:
+                    gt.append(f['gt_'+modality][:])
+                gt = np.array(gt)
+                # if self.input_dual_modal:
+                #     image = np.stack(f['image_t1'][:], f['image_t2'][:])
+                # else:
+                #     image = np.expand_dims(f['image_{}'.format(self.input_modalities[0])][:], axis=0)
+                # if self.output_dual_modal:
+                #     gt = np.stack(f['gt_t1'][:], f['gt_t2'][:])
+                # else:
+                #     gt = np.expand_dims(f['gt_{}'.format(self.output_modalities[0])][:], axis=0)
+                image = image.astype(np.float32)
+                gt = gt.astype(np.float32)
+            return image, gt
         # image_t1 = sitk.ReadImage(img_t1)
         # image_t2 = sitk.ReadImage(img_t2)
         # gt_t1 = image_t1
@@ -126,8 +136,23 @@ class SynthHCPDataset(Dataset):
         
 
     def load(self):
-        ret = thread_map(self._load,self.list_basenames, max_workers=32, total=self.num_samples)
+        # image_save_path = op.join(self.data_dir, 'images_{}_{}.npy'.format(self.input_modalities, self.output_modalities))
+
+        # pool = mp.Pool(mp.cpu_count()-16)
+        ret = thread_map(self._load, self.list_basenames, max_workers=1, total=self.num_samples)
+        # ret = pool.imap_unordered(pmap, trange(num_samples))
+        # pool.close()
+        # print(ret)
         images,gts = zip(*ret)
+
+        # for a in zip(list_images_t1, list_images_t2, list_labels):
+        #     image, gt = _load(a)
+        #     images.append(image)
+        #     gts.append(gt)
+        #     count += 1
+        #     if count == num_samples:
+        #         break
+            
         self.images = np.array(images)
         self.gts = np.array(gts)
 
@@ -230,5 +255,5 @@ class SynthHCPDatasetTIO(tio.SubjectsDataset):
         
 
     def load(self):
-        ret = thread_map(self._load,self.list_basenames, max_workers=32, total=self.num_samples)
+        ret = thread_map(self._load,self.list_basenames, max_workers=1, total=self.num_samples)
         self.subjects = ret
