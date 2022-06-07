@@ -133,8 +133,8 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.kl = None
         self.mse = None
 
-        self.enc_mu = mu
-        self.enc_logvar = logvar
+        self.enc_mu = nn.Parameter(mu,requires_grad=False)
+        self.enc_logvar = nn.Parameter(logvar,requires_grad=False)
         sample = self.sample_from_mu_var(mu, logvar)
         x = self.latent_to_decode(sample)
         x = torch.transpose(x, 1, 4)
@@ -181,8 +181,8 @@ class Abstract3DBUNet(Abstract3DUNet):
         # serr = torch.square(err)
         # sse = torch.sum(serr)
         mse = torch.nn.MSELoss()(im, im_hat)
-        self.mse = mse
-        self.kl = kl
+        self.mse = nn.Parameter(mse, requires_grad=False)
+        self.kl = nn.Parameter(kl, requires_grad=False)
         # self.logger.info(f"MSE: {mse}; KL: {kl*self.alpha}")
         FE_simple = mse + self.alpha * kl
         # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple

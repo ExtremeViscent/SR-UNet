@@ -13,7 +13,7 @@
             "justMyCode": false,
             "args": [
                 "--config",
-                "/home/viscent/hdd/viscent/SR-UNet/configs/config_vae_dhcp_t1_800.py",
+                "/home/viscent/hdd/viscent/SR-UNet/configs/config_vae_dhcp_dbg.py",
             ],
         }
     ]
