@@ -115,6 +115,7 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.logger = get_dist_logger()
         self.enc_mu = None
         self.enc_logvar = None
+        self.warming_up = True
         self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
 
     def forward(self, x):
@@ -158,6 +159,9 @@ class Abstract3DBUNet(Abstract3DUNet):
 
         return x
 
+    def enable_fe_loss(self):
+        self.warming_up = False
+
     def sample_from_mu_var(self, mu, logvar):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
@@ -168,7 +172,10 @@ class Abstract3DBUNet(Abstract3DUNet):
     def VAE_loss(self, im, im_hat):
 
         # im = im.squeeze()
-
+        if self.warming_up:
+            mse = torch.nn.MSELoss()(im, im_hat)
+            self.mse = nn.Parameter(mse)
+            return mse
         mu, logvar = self.enc_mu, self.enc_logvar
         # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)
         kl = 0.5 * (logvar.exp() + mu**2 - 1 - logvar)
@@ -181,8 +188,8 @@ class Abstract3DBUNet(Abstract3DUNet):
         # serr = torch.square(err)
         # sse = torch.sum(serr)
         mse = torch.nn.MSELoss()(im, im_hat)
-        self.mse = nn.Parameter(mse, requires_grad=False)
-        self.kl = nn.Parameter(kl, requires_grad=False)
+        self.mse = nn.Parameter(mse)
+        self.kl = nn.Parameter(kl)
         # self.logger.info(f"MSE: {mse}; KL: {kl*self.alpha}")
         FE_simple = mse + self.alpha * kl
         # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple

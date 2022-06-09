@@ -160,6 +160,7 @@ def train():
                             is_segmentation=False,
                             latent_size=gpc.config.LATENT_SIZE,
                             alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
+            criterion = model.VAE_loss
         else:
             model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
                             out_channels=gpc.config.OUT_CHANNELS,
@@ -168,11 +169,11 @@ def train():
                             num_groups=min(1, gpc.config.F_MAPS[0]//2),
                             is_segmentation=False,
                             )
+            criterion = nn.MSELoss()
         if WARMUP_EPOCHS is None and vae:
-            criterion = model.VAE_loss
+            model.enable_fe_loss()
             logger.info('Using VAE loss')
         else:
-            criterion = torch.nn.MSELoss()
             logger.info('Using MSE loss')
         logger.info('Initializing K-Fold', ranks=[0])
         optim = torch.optim.Adam(
@@ -197,7 +198,7 @@ def train():
         for epoch in range(gpc.config.NUM_EPOCHS):
             model.train()
             if WARMUP_EPOCHS is not None and epoch == WARMUP_EPOCHS:
-                criterion = model.VAE_loss
+                model.enable_fe_loss()
                 logger.info('Using VAE loss', ranks=[0])
             for im,gt in tqdm(train_loader):
                 im=im.cuda()

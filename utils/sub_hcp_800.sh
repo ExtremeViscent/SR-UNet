@@ -6,7 +6,7 @@
 #SBATCH --partition=gpu
 #SBATCH -N 1
 #SBATCH -n 9
-#SBATCH -t 24:00:00
+#SBATCH -t 40:00:00
 
 
 export MASTER_PORT=11451
