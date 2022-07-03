@@ -138,12 +138,9 @@ class Abstract3DBUNet(Abstract3DUNet):
         sample = self.sample_from_mu_var(mu, logvar)
         x = self.latent_to_decode(sample)
         x = torch.transpose(x, 1, 4)
-        encoders_features.insert(0, x)
         # encoders_features.insert(2, x)
         # remove the last encoder's output from the list
         # !!remember: it's the 1st in the list
-        encoders_features = encoders_features[1:]
-
         # decoder part
         for decoder, encoder_features in zip(self.decoders, encoders_features):
             # pass the output from the corresponding encoder and the output

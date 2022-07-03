@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/scratch/users/k21113539/dhcp_lores'
+data_dir = '/media/hdd/dhcp/dhcp_lores'
 list_basenames = glob.glob(op.join(data_dir,'labels', '*.nii.gz'))
 list_basenames.sort()
 print(len(list_basenames))
@@ -38,12 +38,12 @@ list_basenames = [op.basename(x).split('_')[0] for x in list_images_t1]
 num_samples = len(list_basenames)
 spacing = [1.0,1.0,1.0]
 spacing = np.array(spacing)
-spacing *= 8
+spacing *= 5
 target_shape = (108, 145, 145)
 factor = spacing[2] / spacing[0]
 resize_transform = tio.Resize(target_shape=target_shape)
 resample_transform = tio.Resample(target=spacing)
-blur_transform = tio.RandomBlur(6)
+blur_transform = tio.RandomBlur(3)
 transform  = tio.Compose([resample_transform,resize_transform,blur_transform])
 transform_gt = resize_transform
 
@@ -76,7 +76,7 @@ def _load(x):
 
 def _load_h5(x):
     img_t1, img_t2, basename = x
-    preprocessed_path = op.join(data_dir, "preprocessed_h5")
+    preprocessed_path = op.join(data_dir, "preprocessed_h5_d5b3")
     image_t1 = sitk.ReadImage(img_t1)
     image_t2 = sitk.ReadImage(img_t2)
     gt_t1 = image_t1
