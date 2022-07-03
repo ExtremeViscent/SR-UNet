@@ -49,8 +49,8 @@ def eval(model, cur_epoch,fold):
         os.makedirs(checkpoint_dir)
     if not os.path.exists(pred_dir):
         os.makedirs(pred_dir)
-    ckpt_path = os.path.join(checkpoint_dir, '{}_sd.pth'.format(cur_epoch))
-    torch.save(dict(state_dict=model.state_dict()),ckpt_path)
+    # ckpt_path = os.path.join(checkpoint_dir, '{}_sd.pth'.format(cur_epoch))
+    # torch.save(dict(state_dict=model.state_dict()),ckpt_path)
     ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
     torch.save(model,ckpt_path)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
@@ -96,8 +96,8 @@ def eval(model, cur_epoch,fold):
         im_target = Image.fromarray(im_target).convert('RGB')
         im_image.save(os.path.join(output_dir, 'image.png'))
         im_target.save(os.path.join(output_dir, 'target.png'))
-    sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
-                    os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
+    # sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
+    #                 os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
     if not os.path.exists(os.path.join(pred_dir, '2d')):
         os.makedirs(os.path.join(pred_dir, '2d'))
     im_pred.save(os.path.join(pred_dir, "2d",
@@ -160,6 +160,7 @@ def train():
                             is_segmentation=False,
                             latent_size=gpc.config.LATENT_SIZE,
                             alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
+            criterion = model.VAE_loss
         else:
             model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
                             out_channels=gpc.config.OUT_CHANNELS,
@@ -168,17 +169,17 @@ def train():
                             num_groups=min(1, gpc.config.F_MAPS[0]//2),
                             is_segmentation=False,
                             )
+            criterion = nn.MSELoss()
         if WARMUP_EPOCHS is None and vae:
-            criterion = model.VAE_loss
+            model.enable_fe_loss()
             logger.info('Using VAE loss')
         else:
-            criterion = torch.nn.MSELoss()
             logger.info('Using MSE loss')
         logger.info('Initializing K-Fold', ranks=[0])
         optim = torch.optim.Adam(
             model.parameters(),
             lr=gpc.config.LR,
-            betas=(0.9, 0.99)
+            betas=(0.9, 0.999)
         )
         lr_scheduler = CosineAnnealingLR(
             optim, gpc.config.NUM_EPOCHS*(train_loader.__len__()//gpc.config.BATCH_SIZE))
@@ -197,7 +198,7 @@ def train():
         for epoch in range(gpc.config.NUM_EPOCHS):
             model.train()
             if WARMUP_EPOCHS is not None and epoch == WARMUP_EPOCHS:
-                criterion = model.VAE_loss
+                model.enable_fe_loss()
                 logger.info('Using VAE loss', ranks=[0])
             for im,gt in tqdm(train_loader):
                 im=im.cuda()
@@ -209,6 +210,7 @@ def train():
                 if getattr(model,'kl') is not None:
                     TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 optim.step()
                 n_step+=1
             logger.info('Epoch {}/{}'.format(epoch, gpc.config.NUM_EPOCHS), ranks=[0])
