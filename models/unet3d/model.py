@@ -2,6 +2,7 @@ from copy import deepcopy
 import torch.nn as nn
 import torch
 import torch.optim as optim
+from torch.nn import KLDivLoss
 
 from colossalai.core import global_context as gpc
 from colossalai.logging import disable_existing_loggers, get_dist_logger
@@ -116,7 +117,10 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.enc_mu = None
         self.enc_logvar = None
         self.warming_up = True
+        self.kl = None
+        self.mse = None
         self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
+        self.init_weights()
 
     def forward(self, x):
         # encoder part
@@ -131,8 +135,8 @@ class Abstract3DBUNet(Abstract3DUNet):
         x = torch.transpose(x, 1, 4)
         mu = self.mu(x)
         logvar = self.logvar(x)
-        self.kl = None
-        self.mse = None
+        # self.kl = None
+        # self.mse = None
 
         self.enc_mu = nn.Parameter(mu,requires_grad=False)
         self.enc_logvar = nn.Parameter(logvar,requires_grad=False)
@@ -168,6 +172,12 @@ class Abstract3DBUNet(Abstract3DUNet):
         sample = eps.mul(std).add_(mu)
         return sample
 
+    def init_weights(self):
+        nn.init.eye_(self.mu.weight.data)
+        nn.init.zeros_(self.mu.bias.data)
+        nn.init.normal_(self.logvar.weight.data, 0, 0.1)
+        nn.init.zeros_(self.logvar.bias.data)
+
 
     def VAE_loss(self, im, im_hat):
 
@@ -178,8 +188,14 @@ class Abstract3DBUNet(Abstract3DUNet):
             return mse
         mu, logvar = self.enc_mu, self.enc_logvar
         # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)
-        kl = 0.5 * (logvar.exp() + mu**2 - 1 - logvar)
-        kl = torch.sum(kl)
+        kl = torch.sum(0.5 * (logvar.exp() + mu**2 - 1 - logvar))
+        # kl = torch.mean(kl)
+        # kl = KLDivLoss()(mu, logvar)
+        # while kl * self.alpha > 1e+2:
+        #     self.alpha *= 0.5
+        # if self.kl is not None and kl/self.kl > 1000.:
+        #         print('clipped kl {} and {}'.format(kl, self.kl))
+        #         kl = self.kl
         # print("mu shape: ", mu.shape)
         # print("logvar shape: ", logvar.shape)
         # print("kl shape: ", kl.shape)
