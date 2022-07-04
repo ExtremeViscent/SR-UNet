@@ -185,7 +185,7 @@ class Abstract3DBUNet(Abstract3DUNet):
             return mse
         mu, logvar = self.enc_mu, self.enc_logvar
         # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)
-        kl = torch.sum(0.5 * (logvar.exp() + mu**2 - 1 - logvar))
+        kl = torch.mean(0.5 * (torch.exp(logvar) + torch.pow(mu,2) - 1 - logvar))
         # kl = torch.mean(kl)
         # kl = KLDivLoss()(mu, logvar)
         # while kl * self.alpha > 1e+2:
@@ -201,8 +201,10 @@ class Abstract3DBUNet(Abstract3DUNet):
         # serr = torch.square(err)
         # sse = torch.sum(serr)
         mse = torch.nn.MSELoss()(im, im_hat)
-        self.mse = nn.Parameter(mse)
-        self.kl = nn.Parameter(kl)
+        self.mse = nn.Parameter(mse,requires_grad=False)
+        self.kl = nn.Parameter(kl,requires_grad=False)
+        # print("mse: ", mse)
+        # print("kl: ", kl)
         # self.logger.info(f"MSE: {mse}; KL: {kl*self.alpha}")
         FE_simple = mse + self.alpha * kl
         # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple
