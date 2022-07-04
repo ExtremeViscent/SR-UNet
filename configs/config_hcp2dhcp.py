@@ -1,9 +1,9 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR="/scratch/prj/bayunet/HCP_1200"
-OUTPUT_DIR="/scratch/prj/bayunet/experiments/output_dhcp2hcp"
-CHECKPOINT="/scratch/prj/bayunet/experiments_small_feature/output_vae_dhcp_t1_800_warmup/0/checkpoints/199.pth"
+DATA_DIR="/scratch/prj/bayunet/dhcp_lores"
+OUTPUT_DIR="/scratch/prj/bayunet/experiments/output_hcp2dhcp"
+CHECKPOINT="/scratch/prj/bayunet/experiments_small_feature/output_vae_hcp_t1_800_warmup/0/checkpoints/199.pth"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
@@ -20,4 +20,4 @@ NUM_SAMPLES=None
 LATENT_SIZE = 16
 ALPHA = 0.00025
 DOWN_FACTOR = 5
-DATASET='HCP'
+DATASET='dHCP'
