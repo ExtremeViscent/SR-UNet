@@ -152,23 +152,29 @@ def train():
         train_loader, test_loader = dataloaders[i]
         vae = getattr(gpc.config, 'VAE', True)
         if vae:
-            model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
-                            out_channels=gpc.config.OUT_CHANNELS,
-                            f_maps=gpc.config.F_MAPS,
-                            layer_order='gcr',
-                            num_groups=min(1, gpc.config.F_MAPS[0]//2),
-                            is_segmentation=False,
-                            latent_size=gpc.config.LATENT_SIZE,
-                            alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
+            if getattr(gpc.config, 'CHECKPOINT', None) is not None:
+                model = torch.load(getattr(gpc.config, 'CHECKPOINT', None))
+            else:
+                model = BUNet3D(in_channels=gpc.config.IN_CHANNELS,
+                                out_channels=gpc.config.OUT_CHANNELS,
+                                f_maps=gpc.config.F_MAPS,
+                                layer_order='gcr',
+                                num_groups=min(1, gpc.config.F_MAPS[0]//2),
+                                is_segmentation=False,
+                                latent_size=gpc.config.LATENT_SIZE,
+                                alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
             criterion = model.VAE_loss
         else:
-            model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
-                            out_channels=gpc.config.OUT_CHANNELS,
-                            f_maps=gpc.config.F_MAPS,
-                            layer_order='gcr',
-                            num_groups=min(1, gpc.config.F_MAPS[0]//2),
-                            is_segmentation=False,
-                            )
+            if getattr(gpc.config, 'CHECKPOINT', None) is not None:
+                model = torch.load(getattr(gpc.config, 'CHECKPOINT', None))
+            else:
+                model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
+                                out_channels=gpc.config.OUT_CHANNELS,
+                                f_maps=gpc.config.F_MAPS,
+                                layer_order='gcr',
+                                num_groups=min(1, gpc.config.F_MAPS[0]//2),
+                                is_segmentation=False,
+                                )
             criterion = nn.MSELoss()
         if WARMUP_EPOCHS is None and vae:
             model.enable_fe_loss()
