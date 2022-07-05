@@ -13,7 +13,7 @@ from colossalai.engine.schedule import (InterleavedPipelineSchedule,
                                         PipelineSchedule)
 from colossalai.logging import disable_existing_loggers, get_dist_logger
 from colossalai.trainer import Trainer, hooks
-from colossalai.nn.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader
@@ -104,6 +104,7 @@ def eval(model, cur_epoch,fold):
                     '{}.png'.format(cur_epoch)))
 
 def train():
+    torch.autograd.set_detect_anomaly(True)
     parser = colossalai.get_default_parser()
     parser.add_argument('--from_torch', default=False, action='store_true')
     args = parser.parse_args()
@@ -216,9 +217,10 @@ def train():
                 if getattr(model,'kl') is not None:
                     TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+                torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
                 optim.step()
                 n_step+=1
+            lr_scheduler.step()
             logger.info('Epoch {}/{}'.format(epoch, gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Train Loss: {:.4f}'.format(loss.item()), ranks=[0])
             model.eval()
