@@ -3,7 +3,7 @@ import os
 
 DATA_DIR="/scratch/prj/bayunet/HCP_1200"
 OUTPUT_DIR="/scratch/prj/bayunet/experiments/output_dhcp2hcp"
-CHECKPOINT="/scratch/prj/bayunet/experiments_small_feature/output_vae_dhcp_t1_800_warmup/0/checkpoints/199.pth"
+CHECKPOINT="/scratch/prj/bayunet/experiments_0706/output_vae_dhcp_t1_800_warmup/0/checkpoints/199.pth"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
