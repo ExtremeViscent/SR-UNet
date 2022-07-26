@@ -1,8 +1,8 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR="/scratch/prj/bayunet/HCP_1200"
-OUTPUT_DIR="/scratch/prj/bayunet/experiments/output_dhcp2hcp"
+DATA_DIR = "/media/hdd/dhcp/dhcp_lores"
+OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_vae_dhcp_t1_800"
 CHECKPOINT="/scratch/prj/bayunet/experiments_small_feature/output_vae_dhcp_t1_800_warmup/0/checkpoints/199.pth"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
