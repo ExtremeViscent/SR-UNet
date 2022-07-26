@@ -15,6 +15,7 @@ nohup.out
 output_vanilla/
 output*/
 outfiles/
+results/
 experiments/
 *.out
 *.nii
