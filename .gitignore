@@ -25,3 +25,4 @@ prepare_env_*
 inference/*.pdf
 inference/*.png
 inference/*_structure
+*.mat
