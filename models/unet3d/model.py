@@ -2,8 +2,6 @@ from copy import deepcopy
 import torch.nn as nn
 import torch
 import torch.optim as optim
-from torch.nn import KLDivLoss
-from  torch.distributions.distribution import MultivariateNormal
 
 from colossalai.core import global_context as gpc
 from colossalai.logging import disable_existing_loggers, get_dist_logger
@@ -112,7 +110,7 @@ class Abstract3DBUNet(Abstract3DUNet):
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
         self.mu = nn.Linear(f_maps[-1], latent_size)
-        self.logvar = nn.Linear(f_maps[-1], latent_size**2)
+        self.logvar = nn.Linear(f_maps[-1], latent_size)
         self.alpha = alpha
         self.logger = get_dist_logger()
         self.enc_mu = None
@@ -122,7 +120,6 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.mse = None
         self.latent_size = latent_size
         self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
-        self.mvn_sampler = MultivariateNormal()
         self.init_weights()
 
     def forward(self, x):
@@ -139,7 +136,6 @@ class Abstract3DBUNet(Abstract3DUNet):
 
         mu = self.mu(x)
         logvar = self.logvar(x)
-        logvar = logvar.view(logvar.size(0), self.latent_size, self.latent_size)
 
         
         # self.kl = None
@@ -147,8 +143,8 @@ class Abstract3DBUNet(Abstract3DUNet):
 
         self.enc_mu = nn.Parameter(mu,requires_grad=False)
         self.enc_logvar = nn.Parameter(logvar,requires_grad=False)
-        # sample = self.sample_from_mu_var(mu, logvar)
-        sample = MultivariateNormal(mu, torch.exp(logvar))
+        sample = self.sample_from_mu_var(mu, logvar)
+        # sample = MultivariateNormal(mu, torch.exp(logvar))
         x = self.latent_to_decode(sample)
         x = torch.transpose(x, 1, 4)
         # encoders_features.insert(2, x)
