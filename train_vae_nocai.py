@@ -38,7 +38,15 @@ class TensorBoardLogger():
     def __call__(self, phase, step, **kwargs):
         for key, value in kwargs.items():
             self.writer.add_scalar(f'{key}/{phase}', value, step)
-        
+
+class BetaScheduler():
+    def __init__(self, model, LRScheduler):
+        self.lr_scheduler = LRScheduler
+        self.model = model
+    def step(self):
+        self.model.alpha = self.lr_scheduler.get_lr()[0]
+
+
 
 def eval(model, cur_epoch,fold):
     output_dir = gpc.config.OUTPUT_DIR
@@ -190,6 +198,8 @@ def train():
         )
         lr_scheduler = CosineAnnealingLR(
             optim, gpc.config.NUM_EPOCHS*(train_loader.__len__()//gpc.config.BATCH_SIZE))
+        if vae: 
+            beta_scheduler = BetaScheduler(model, lr_scheduler)
         TBLogger = TensorBoardLogger(log_dir = op.join(output_dir,'{}'.format(i), 'tb_logs'),comment='fold_{}'.format(i))
         val_image,val_target = val_loader.dataset.__getitem__(0)
         if not os.path.exists(os.path.join(output_dir, '{}'.format(i))):
@@ -221,6 +231,8 @@ def train():
                 optim.step()
                 n_step+=1
             lr_scheduler.step()
+            if vae:
+                beta_scheduler.step()
             logger.info('Epoch {}/{}'.format(epoch, gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Train Loss: {:.4f}'.format(loss.item()), ranks=[0])
             model.eval()
