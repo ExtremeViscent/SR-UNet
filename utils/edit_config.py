@@ -5,7 +5,7 @@ from glob import glob
 
 if __name__ == '__main__':
     if len(sys.argv) != 4:
-        print('Usage: edit_config.py <file_reg> <key> <value>')
+        print('Usage: edit_config.py <file_reg> <start_with> <value>')
         sys.exit(1)
     list_file = glob(sys.argv[1])
     for file in list_file:
@@ -15,7 +15,7 @@ if __name__ == '__main__':
         with open(file, 'w') as f:
             for line in lines:
                 if line.startswith(sys.argv[2]):
-                    line = sys.argv[2] + ' = ' + sys.argv[3] + '\n'
+                    line = sys.argv[3] + '\n'
                     print('Changed:', line)
                 f.write(line)
     print('Done!')

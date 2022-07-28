@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --output=/scratch/users/%u/dhcp_800_%j.out
+#SBATCH --output=/scratch/users/%u/SR-UNet/logs/
 #SBATCH --job-name=bunet-dhcp
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
