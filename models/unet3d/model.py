@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 import torch.optim as optim
 from torch.nn import KLDivLoss
-from  torch.distributions.distribution import MultivariateNormal
+from  torch.distributions import MultivariateNormal
 
 from colossalai.core import global_context as gpc
 from colossalai.logging import disable_existing_loggers, get_dist_logger
@@ -11,6 +11,7 @@ from colossalai.logging import disable_existing_loggers, get_dist_logger
 from .buildingblocks import DoubleConv, ExtResNetBlock, create_encoders, \
     create_decoders
 from .utils import number_of_features_per_level, get_class
+from torch.distributions import constraints
 
 
 class Abstract3DUNet(nn.Module):
@@ -111,8 +112,13 @@ class Abstract3DBUNet(Abstract3DUNet):
         super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
-        self.mu = nn.Linear(f_maps[-1], latent_size)
-        self.logvar = nn.Linear(f_maps[-1], latent_size**2)
+        ## Input shape (B, 1, 108, 145, 145)
+        ## BNL shape (B, 6, 9, 9, f_maps[-1])
+        # self.mu = nn.Linear(f_maps[-1], latent_size)
+        # self.logvar = nn.Linear(f_maps[-1], latent_size)
+        self.bnl_size = 6 * 9 * 9 * f_maps[-1]
+        self.mu = nn.Linear(self.bnl_size, latent_size)
+        self.logvar = nn.Linear(self.bnl_size, latent_size ** 2)
         self.alpha = alpha
         self.logger = get_dist_logger()
         self.enc_mu = None
@@ -121,8 +127,8 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.kl = None
         self.mse = None
         self.latent_size = latent_size
-        self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
-        self.mvn_sampler = MultivariateNormal()
+        self.f_maps = f_maps
+        self.latent_to_decode = nn.Linear(latent_size, self.bnl_size)
         self.init_weights()
 
     def forward(self, x):
@@ -133,24 +139,49 @@ class Abstract3DBUNet(Abstract3DUNet):
             # reverse the encoder outputs to be aligned with the decoder
             encoders_features.insert(0, x)
         # VAE part
-        # x = x.view(x.size(0),-1,self.latent_size)
+        x = x.view(x.size(0),-1)
         encoders_features = encoders_features[1:]
-        x = torch.transpose(x, 1, 4)
-
+        # x = torch.transpose(x, 1, 4)
         mu = self.mu(x)
         logvar = self.logvar(x)
         logvar = logvar.view(logvar.size(0), self.latent_size, self.latent_size)
+        cov = torch.exp(logvar / 2)
+        # Make it positive definite
+        for b in range(cov.shape[0]):
+            L,V = torch.linalg.eigh(cov[b])
+            cov[b] = V.matmul(torch.diag(L)).matmul(V.inverse())
+            L,V = torch.linalg.eigh(cov[b])
+            print("original: ", cov[b])
+            print("inverse transform:", V.matmul(torch.diag(L)).matmul(V.inverse()))
+            s = 0
+            p = 0
+            for i in range(L.shape[0]):
+                if L[i] < 0:
+                    s += 1
+                elif L[i] >0:
+                    if p == 0:
+                        p = L[i]
+                    p = min(p, L[i])
+            t = s**2 * 100 + 1
+            for i in range(L.shape[0]):
+                if L[i] < 0:
+                    L[i] = p * (s-L[i]) ** 2 / t
+            print("new eigenvalues:", L)
+            cov[b] = V.matmul(torch.diag(L)).matmul(V.inverse())
+            # cov[b] = V.matmul(torch.diag(L)).matmul(V.t())
+            print(torch.linalg.eigh(cov[b]).eigenvalues)
+            # cov[b] = torch.mm(cov[b], cov[b].t())
+            # cov[b].add_(cov[b].clone().t()).div_(2)
+            # print('covariance matrix: ', cov[b])
+            print(constraints._PositiveDefinite().check(cov[b]))
 
-        
-        # self.kl = None
-        # self.mse = None
 
         self.enc_mu = nn.Parameter(mu,requires_grad=False)
-        self.enc_logvar = nn.Parameter(logvar,requires_grad=False)
+        self.enc_logvar = nn.Parameter(cov,requires_grad=False)
         # sample = self.sample_from_mu_var(mu, logvar)
-        sample = MultivariateNormal(mu, torch.exp(logvar))
+        sample = MultivariateNormal(mu, cov).sample()
         x = self.latent_to_decode(sample)
-        x = torch.transpose(x, 1, 4)
+        x = x.view(x.size(0), self.f_maps[-1], 9, 9, 6)
         # encoders_features.insert(2, x)
         # remove the last encoder's output from the list
         # !!remember: it's the 1st in the list
@@ -191,9 +222,18 @@ class Abstract3DBUNet(Abstract3DUNet):
             mse = torch.nn.MSELoss()(im, im_hat)
             self.mse = nn.Parameter(mse)
             return mse
-        mu, logvar = self.enc_mu, self.enc_logvar
         # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)
-        kl = torch.sum(0.5 * (torch.exp(logvar) + torch.pow(mu,2) - 1 - logvar))
+        # kl = torch.sum(0.5 * (torch.exp(logvar) + torch.pow(mu,2) - 1 - logvar))
+        kl = torch.zeros(im.shape[0]).cuda()
+        for i, (mu, cov) in enumerate(zip(self.enc_mu, self.enc_logvar)):
+            kl_0 = mu.unsqueeze(0).matmul(mu.unsqueeze(0).t())
+            kl_1 = torch.trace(cov).unsqueeze(0)
+            kl_2 = mu.shape[0]
+            kl_3 = torch.log(torch.det(cov)).unsqueeze(0)
+            print(kl_0, kl_1, kl_2, kl_3)
+            kl[i] = 0.5 * (kl_0 + kl_1 - kl_2 - kl_3)
+        kl = torch.mean(kl)
+        print('kl: ', kl)
         # kl = torch.mean(kl)
         # kl = KLDivLoss()(mu, logvar)
         # while kl * self.alpha > 1e+2:
