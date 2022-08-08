@@ -40,11 +40,14 @@ class TensorBoardLogger():
             self.writer.add_scalar(f'{key}/{phase}', value, step)
 
 class BetaScheduler():
-    def __init__(self, model, LRScheduler):
-        self.lr_scheduler = LRScheduler
+    def __init__(self, model, min=0,max=1, cycle_len=100):
         self.model = model
+        self.min = min
+        self.max = max
+        self.current_step = 0
+        self.cycle_len = cycle_len
     def step(self):
-        self.model.alpha = self.lr_scheduler.get_last_lr()[0]
+        self.model.alpha = self.min + (self.max - self.min) * (1 - np.cos(self.current_step / self.cycle_len * np.pi)) / 2
 
 
 
