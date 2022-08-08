@@ -10,6 +10,7 @@ from .buildingblocks import DoubleConv, ExtResNetBlock, create_encoders, \
     create_decoders
 from .utils import number_of_features_per_level, get_class
 
+import kornia.augmentation as K
 
 class Abstract3DUNet(nn.Module):
     """
@@ -105,7 +106,7 @@ class Abstract3DUNet(nn.Module):
 class Abstract3DBUNet(Abstract3DUNet):
     def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
                  num_groups=8, num_levels=4, is_segmentation=True, conv_kernel_size=3, pool_kernel_size=2,
-                 conv_padding=1, latent_size=32, alpha=0.8, **kwargs):
+                 conv_padding=1, latent_size=32, alpha=0.8, augmentation=True, **kwargs):
         super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
@@ -120,10 +121,18 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.mse = None
         self.latent_size = latent_size
         self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
+        self.transform = nn.Sequential(
+            K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True),
+            K.RandomMotionBlur3D(3, 35., 0.5, p=0.4,keepdim=True),
+            K.RandomAffine3D((15., 20., 20.), p=0.4,keepdim=True),
+        )
+        self.augmentation = augmentation
         self.init_weights()
 
     def forward(self, x):
         # encoder part
+        if self.augmentation:
+            x = self.transform(x)
         encoders_features = []
         for encoder in self.encoders:
             x = encoder(x)
