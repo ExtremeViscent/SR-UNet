@@ -32,4 +32,4 @@ conda activate cai
 nvidia-smi
 
 cd /scratch/users/k21113539/SR-UNet
-python /scratch/users/k21113539/SR-UNet/train_vae_nocai.py --config /scratch/users/k21113539/SR-UNet/configs/config_hcp2dhcp.py
+python /scratch/users/k21113539/SR-UNet/train_vae_nocai.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_hcp2dhcp.py

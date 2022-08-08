@@ -32,6 +32,6 @@ conda activate cai
 nvidia-smi
 
 cd /scratch/users/k21113539/SR-UNet
-torchrun --nproc_per_node 4 /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_dhcp_t1.py
-# torchrun --nnodes $NNODES --master_addr $MASTER_ADDR --master_port $MASTER_PORT --node_rank $NODE_RANK --nproc_per_node $NPROC_PER_NODE /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_hcp_t1.py
-# srun -p gpu -N 2 --gres=gpu:4 --ntasks-per-node=4 python /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/config_vae_hcp_t1.py
+torchrun --nproc_per_node 4 /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_dhcp_t1.py
+# torchrun --nnodes $NNODES --master_addr $MASTER_ADDR --master_port $MASTER_PORT --node_rank $NODE_RANK --nproc_per_node $NPROC_PER_NODE /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_hcp_t1.py
+# srun -p gpu -N 2 --gres=gpu:4 --ntasks-per-node=4 python /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_hcp_t1.py

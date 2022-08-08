@@ -26,3 +26,4 @@ inference/*.pdf
 inference/*.png
 inference/*_structure
 *.mat
+bayunet

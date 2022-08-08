@@ -44,7 +44,7 @@ class BetaScheduler():
         self.lr_scheduler = LRScheduler
         self.model = model
     def step(self):
-        self.model.alpha = self.lr_scheduler.get_lr()[0]
+        self.model.alpha = self.lr_scheduler.get_last_lr()[0]
 
 
 
@@ -223,7 +223,7 @@ def train():
                 optim.zero_grad()
                 output = model(im)
                 loss = criterion(output, gt)
-                TBLogger(phase='train', step=n_step,loss=loss)
+                TBLogger(phase='train', step=n_step,loss=loss,LR=lr_scheduler.get_last_lr()[0])
                 if getattr(model,'kl') is not None:
                     TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse)
                 loss.backward()
