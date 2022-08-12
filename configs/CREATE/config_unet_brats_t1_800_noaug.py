@@ -1,8 +1,8 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR = "/scratch/prj/bayunet/dhcp_lores"
-OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_unet_dhcp_t1_800"
+DATA_DIR = "/scratch/prj/bayunet/BraTS2020"
+OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_unet_brats_t1_noaug"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
@@ -21,8 +21,7 @@ NUM_SAMPLES=None
 LATENT_SIZE = 8
 ALPHA = 0.000025
 DOWN_FACTOR = 5
-DATASET='dHCP'
-
+DATASET='BraTS'
 
 # NNODES=1
 # NGPUS_PER_NODE=2

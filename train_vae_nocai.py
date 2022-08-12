@@ -16,7 +16,7 @@ from colossalai.trainer import Trainer, hooks
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader
+from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader
 from models.unet3d.model import BUNet3D, UNet3D
 import importlib
 import SimpleITK as sitk
@@ -40,14 +40,17 @@ class TensorBoardLogger():
             self.writer.add_scalar(f'{key}/{phase}', value, step)
 
 class BetaScheduler():
-    def __init__(self, model, min=0,max=1, cycle_len=100):
+    def __init__(self, model, min=0,max=0.0001, cycle_len=1000):
         self.model = model
         self.min = min
         self.max = max
         self.current_step = 0
         self.cycle_len = cycle_len
+    def get_beta(self):
+        return self.model.alpha
     def step(self):
         self.model.alpha = self.min + (self.max - self.min) * (1 - np.cos(self.current_step / self.cycle_len * np.pi)) / 2
+        self.current_step += 1 
 
 
 
@@ -158,6 +161,16 @@ def train():
                                                             n_splits=n_splits,
                                                             augmentation=gpc.config.AUGMENTATION,
                                                             down_factor=gpc.config.DOWN_FACTOR,)
+    elif gpc.config.DATASET == 'BraTS':
+        dataloaders, val_loader = get_synth_brats_dataloader(data_dir=gpc.config.DATA_DIR,
+                                                            batch_size=gpc.config.BATCH_SIZE,
+                                                            num_samples=gpc.config.NUM_SAMPLES,
+                                                            input_modalities=gpc.config.INPUT_MODALITIES,
+                                                            output_modalities=gpc.config.OUTPUT_MODALITIES,
+                                                            output_dir=output_dir,
+                                                            n_splits=n_splits,
+                                                            augmentation=gpc.config.AUGMENTATION,
+                                                            down_factor=gpc.config.DOWN_FACTOR,)
     WARMUP_EPOCHS = getattr(gpc.config, 'WARMUP_EPOCHS', None)
     for i in range(0, 5):
         logger.info('Training fold {}'.format(i), ranks=[0])
@@ -174,7 +187,9 @@ def train():
                                 num_groups=min(1, gpc.config.F_MAPS[0]//2),
                                 is_segmentation=False,
                                 latent_size=gpc.config.LATENT_SIZE,
-                                alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025)
+                                alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025,
+                                augmentation=getattr(gpc.config,'AUGMENTATION',False),
+                                recon_loss=getattr(gpc.config,'RECON_LOSS','mse'))
             criterion = model.VAE_loss
         else:
             if getattr(gpc.config, 'CHECKPOINT', None) is not None:
@@ -200,9 +215,9 @@ def train():
             betas=(0.9, 0.999)
         )
         lr_scheduler = CosineAnnealingLR(
-            optim, gpc.config.NUM_EPOCHS*(train_loader.__len__()//gpc.config.BATCH_SIZE))
+            optim, 1000)
         if vae: 
-            beta_scheduler = BetaScheduler(model, lr_scheduler)
+            beta_scheduler = BetaScheduler(model)
         TBLogger = TensorBoardLogger(log_dir = op.join(output_dir,'{}'.format(i), 'tb_logs'),comment='fold_{}'.format(i))
         val_image,val_target = val_loader.dataset.__getitem__(0)
         if not os.path.exists(os.path.join(output_dir, '{}'.format(i))):
@@ -228,14 +243,15 @@ def train():
                 loss = criterion(output, gt)
                 TBLogger(phase='train', step=n_step,loss=loss,LR=lr_scheduler.get_last_lr()[0])
                 if getattr(model,'kl') is not None:
-                    TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse)
+                    TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse, beta=beta_scheduler.get_beta(),beta_KLD=beta_scheduler.get_beta()*model.kl)
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
                 optim.step()
                 n_step+=1
-            lr_scheduler.step()
-            if vae:
-                beta_scheduler.step()
+                if vae:
+                    beta_scheduler.step()
+                lr_scheduler.step()
+
             logger.info('Epoch {}/{}'.format(epoch, gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Train Loss: {:.4f}'.format(loss.item()), ranks=[0])
             model.eval()
