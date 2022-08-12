@@ -2,6 +2,7 @@ from copy import deepcopy
 import torch.nn as nn
 import torch
 import torch.optim as optim
+from torchmetrics import StructuralSimilarityIndexMeasure
 
 from colossalai.core import global_context as gpc
 from colossalai.logging import disable_existing_loggers, get_dist_logger
@@ -106,7 +107,7 @@ class Abstract3DUNet(nn.Module):
 class Abstract3DBUNet(Abstract3DUNet):
     def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
                  num_groups=8, num_levels=4, is_segmentation=True, conv_kernel_size=3, pool_kernel_size=2,
-                 conv_padding=1, latent_size=32, alpha=0.8, augmentation=True, **kwargs):
+                 conv_padding=1, latent_size=32, alpha=0.8, augmentation=True, recon_loss='mse', **kwargs):
         super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
@@ -119,6 +120,7 @@ class Abstract3DBUNet(Abstract3DUNet):
         self.warming_up = True
         self.kl = None
         self.mse = None
+        self.recon_loss = recon_loss
         self.latent_size = latent_size
         self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
         self.transform = nn.Sequential(
@@ -213,7 +215,11 @@ class Abstract3DBUNet(Abstract3DUNet):
         # err = im - im_hat
         # serr = torch.square(err)
         # sse = torch.sum(serr)
-        mse = torch.nn.MSELoss()(im, im_hat)
+        if self.recon_loss == 'mse':
+            mse = torch.nn.MSELoss()(im, im_hat)
+        elif self.recon_loss == 'ssim':
+            mse = StructuralSimilarityIndexMeasure()(im_hat,im)
+
         self.mse = nn.Parameter(mse,requires_grad=False)
         self.kl = nn.Parameter(kl,requires_grad=False)
         # print("mse: ", mse)

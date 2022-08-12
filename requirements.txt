@@ -16,3 +16,5 @@ IPython
 tensorboard
 torchio
 antspyx
+torchmetrics
+kornia

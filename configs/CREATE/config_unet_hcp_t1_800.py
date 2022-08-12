@@ -2,7 +2,7 @@ from colossalai.amp import AMP_TYPE
 import os
 
 DATA_DIR = "/scratch/prj/bayunet/HCP_1200"
-OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_vae_dhcp_t1_800"
+OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_unet_hcp_t1_800"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
@@ -18,10 +18,10 @@ VAE=False
 WARMUP_EPOCHS=None
 LR=0.001
 NUM_SAMPLES=None
-LATENT_SIZE = 1
+LATENT_SIZE = 8
 ALPHA = 0.000025
 DOWN_FACTOR = 5
-DATASET='dHCP'
+DATASET='HCP'
 
 
 # NNODES=1

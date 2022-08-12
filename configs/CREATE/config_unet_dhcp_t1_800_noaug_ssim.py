@@ -2,7 +2,7 @@ from colossalai.amp import AMP_TYPE
 import os
 
 DATA_DIR = "/scratch/prj/bayunet/dhcp_lores"
-OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_unet_dhcp_t1_800"
+OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_unet_dhcp_t1_noaug_ssim"
 AUGMENTATION=False
 INPUT_MODALITIES=["t1"]
 OUTPUT_MODALITIES=["t1"]
@@ -22,6 +22,8 @@ LATENT_SIZE = 8
 ALPHA = 0.000025
 DOWN_FACTOR = 5
 DATASET='dHCP'
+RECON_LOSS='ssim'
+AUGMENTATION=False
 
 
 # NNODES=1
