@@ -520,14 +520,14 @@ def kl_forward_prior(self, x, mu_q, logvar_q):
         mu_p = mu
         logvar_p = logvar
 
-        cov_p = torch.exp(logvar_p)
-        cov_p[cov_p.isnan()] = cov_p.mean()
-        cov_p[cov_p == 0] = cov_p.mean()
-        cov_p = cov_p.diag()
-        cov_q = torch.exp(logvar_q)
-        cov_q[cov_q.isnan()] = cov_q.mean()
-        cov_q[cov_q == 0] = cov_q.mean()
-        cov_q = cov_q.diag()
+        # cov_p = torch.exp(logvar_p)
+        # cov_p[cov_p.isnan()] = cov_p.mean()
+        # cov_p[cov_p == 0] = cov_p.mean()
+        # cov_p = cov_p.diag()
+        # cov_q = torch.exp(logvar_q)
+        # cov_q[cov_q.isnan()] = cov_q.mean()
+        # cov_q[cov_q == 0] = cov_q.mean()
+        # cov_q = cov_q.diag()
         k = mu_p.shape[0]
 
         # tmp = ((mu_p-mu_q)**2 / torch.exp(logvar_q))
@@ -538,13 +538,16 @@ def kl_forward_prior(self, x, mu_q, logvar_q):
         logvar_p = logvar_p.double()
         mu_q = mu_q.double()
         mu_p = mu_p.double()
+        tmp = ((mu_p-mu_q)**2 / torch.exp(logvar_q))
+        tmp = tmp.sum()
+        kl = 0.5 *( logvar_q.sum() - logvar_p.sum() - k + tmp + (torch.exp(logvar_p-logvar_q).sum()))
         # kl = 0.5 *( logvar_q.sum() - logvar_p.sum() - k + tmp + (torch.exp(logvar_p-logvar_q).sum()))
-        tmp = (logvar_q - logvar_p + torch.exp(2*(logvar_p - logvar_q))/2 - 0.5)
+        # tmp = (logvar_q - logvar_p + torch.exp(2*(logvar_p - logvar_q))/2 - 0.5)
         # tmp[tmp.isnan()] = tmp.median()
         # tmp[tmp.isinf()] = tmp.median()
         # tmp = torch.sigmoid(tmp)
-        tmp = (tmp-tmp.mean())/tmp.std()
-        kl = tmp.mean()
+        # tmp = (tmp-tmp.mean())/tmp.std()
+        # kl = tmp.mean()
         # kl = torch.nn.functional.softmax(kl, dim=0)
         # print(kl)
         return kl
@@ -699,3 +702,22 @@ def swd(image1, image2,
             return result.cpu()
         else:
             return torch.mean(result).cpu()
+
+def eval_hyperfine(image_path: str, model, mu, logvar):
+    image = sitk.ReadImage(image_path)
+    image_tensor = torch.from_numpy(sitk.GetArrayFromImage(image))
+    image_tensor = image_tensor.unsqueeze(0).unsqueeze(0).float().cuda()
+    with torch.no_grad():
+        output_tensor = model(image_tensor)
+    fig_in = display_multiplanar_center(image_tensor[0,0].cpu().numpy())
+    fig_out = display_multiplanar_center(output_tensor[0,0].cpu().numpy())
+    kl = kl_forward_prior(model,output_tensor,mu,logvar).cpu().detach()
+    return fig_in, fig_out, kl
+def eval_tensor(image_tensor, model, mu, logvar):
+    image_tensor = image_tensor.cuda()
+    with torch.no_grad():
+        output_tensor = model(image_tensor)
+    display_multiplanar_center(image_tensor[0,0].cpu().numpy())
+    display_multiplanar_center(output_tensor[0,0].cpu().numpy())
+    kl = kl_forward_prior(model,output_tensor,mu,logvar).cpu().detach()
+    print("KL: ",kl)
