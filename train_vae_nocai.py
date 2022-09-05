@@ -66,7 +66,8 @@ def eval(model, cur_epoch,fold):
     # ckpt_path = os.path.join(checkpoint_dir, '{}_sd.pth'.format(cur_epoch))
     # torch.save(dict(state_dict=model.state_dict()),ckpt_path)
     ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
-    torch.save(model,ckpt_path)
+    if cur_epoch % 10 == 0:
+        torch.save(model,ckpt_path)
     # model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
     #                 out_channels=gpc.config.OUT_CHANNELS,
     #                 f_maps=gpc.config.F_MAPS,
@@ -114,7 +115,8 @@ def eval(model, cur_epoch,fold):
     #                 os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
     if not os.path.exists(os.path.join(pred_dir, '2d')):
         os.makedirs(os.path.join(pred_dir, '2d'))
-    im_pred.save(os.path.join(pred_dir, "2d",
+    if cur_epoch % 10 == 0:
+        im_pred.save(os.path.join(pred_dir, "2d",
                     '{}.png'.format(cur_epoch)))
 
 def train():
@@ -244,9 +246,13 @@ def train():
                 TBLogger(phase='train', step=n_step,loss=loss,LR=lr_scheduler.get_last_lr()[0])
                 if getattr(model,'kl') is not None:
                     TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse, beta=beta_scheduler.get_beta(),beta_KLD=beta_scheduler.get_beta()*model.kl)
-                loss.backward()
-                torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
-                optim.step()
+                try:
+                    loss.backward()
+                    torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
+                    optim.step()
+                except Exception as e:
+                    pass
+
                 n_step+=1
                 if vae:
                     beta_scheduler.step()
