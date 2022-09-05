@@ -149,6 +149,6 @@ def _load(x):
         f.create_dataset('gt_t2', data=subject_gt.image_t2.data[0])
 
 def load(list_images_t1,list_images_t2,list_basenames):
-    thread_map(_load, zip(list_images_t1, list_images_t2, list_masks,list_basenames), max_workers=16, total=num_samples)
+    thread_map(_load, zip(list_images_t1, list_images_t2, list_masks,list_basenames), max_workers=1, total=num_samples)
 
 load(list_images_t1,list_images_t2,list_basenames)
