@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/scratch/proj/bayunet/BraTS2020'
+data_dir = '/media/hdd/BraTS2020'
 list_dir = glob.glob(op.join(data_dir, '*'))
 list_dir.sort()
 list_basenames = [op.basename(x) for x in list_dir]
@@ -65,6 +65,14 @@ def _load(x):
     ])
     subject_gt = transform_2_gt(subject_gt)
     subject = transform_2(subject)
+    image_t1_array = subject.image_t1.data[0]
+    image_t2_array = subject.image_t2.data[0]
+    gt_t1_array = subject_gt.image_t1.data[0]
+    gt_t2_array = subject_gt.image_t2.data[0]
+    image_t1_array = (image_t1_array - image_t1_array.min()) / (image_t1_array.max() - image_t1_array.min())
+    image_t2_array = (image_t2_array - image_t2_array.min()) / (image_t2_array.max() - image_t2_array.min())
+    gt_t1_array = (gt_t1_array - gt_t1_array.min()) / (gt_t1_array.max() - gt_t1_array.min())
+    gt_t2_array = (gt_t2_array - gt_t2_array.min()) / (gt_t2_array.max() - gt_t2_array.min())
     if not op.exists(preprocessed_path):
         os.makedirs(preprocessed_path)
     with h5.File(op.join(preprocessed_path, basename + '.h5'), 'w') as f:
