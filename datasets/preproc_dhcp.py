@@ -121,7 +121,7 @@ def _load(x):
     )
     transform_1 = tio.Compose([
         tio.transforms.Resample(spacing),
-        tio.transforms.RandomBlur((2,2)),
+        tio.transforms.RandomBlur((1,1)),
         tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=20),
         tio.transforms.Resample((1.,1.,1.)),
     ])
