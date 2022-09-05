@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/media/hdd/dhcp/dhcp_lores'
+data_dir = '/scratch/proj/bayunet/dhcp_lores'
 list_basenames = glob.glob(op.join(data_dir,'labels', '*.nii.gz'))
 list_basenames.sort()
 print(len(list_basenames))
@@ -121,7 +121,7 @@ def _load(x):
     )
     transform_1 = tio.Compose([
         tio.transforms.Resample(spacing),
-        tio.transforms.RandomBlur((2,2)),
+        tio.transforms.RandomBlur((1,1)),
         tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=20),
         tio.transforms.Resample((1.,1.,1.)),
     ])

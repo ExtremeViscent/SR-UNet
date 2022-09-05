@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --output=/scratch/users/%u/SR-UNet/logs/
-#SBATCH --job-name=bunet-dhcp
+#SBATCH --output=/scratch/users/%u/SR-UNet/logs/dhcp2hcp_%j.out
+#SBATCH --job-name=dhcp2hcp
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
