@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/media/hdd/HCP_1200'
+data_dir = '/scratch/proj/bayunet/HCP_1200'
 list_dir = glob.glob(op.join(data_dir, '*'))
 list_dir.sort()
 list_basenames = [op.basename(x) for x in list_dir]
