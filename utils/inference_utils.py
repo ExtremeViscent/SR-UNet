@@ -28,8 +28,9 @@ def display_image(image_z, image):
     plt.axis("off")
     plt.show()
 
-def display_multiplanar(image, x=1, y=1, z=1):
+def display_multiplanar(image, x=1, y=1, z=1, save_fig=False, save_path=None):
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    fig.set_facecolor('black')
     ax1.imshow(image[x,:,:], cmap=plt.cm.Greys_r)
     ax1.axis("off")
     ax2.imshow(image[:,y,:], cmap=plt.cm.Greys_r)
@@ -37,12 +38,27 @@ def display_multiplanar(image, x=1, y=1, z=1):
     ax3.imshow(image[:,:,z], cmap=plt.cm.Greys_r)
     ax3.axis("off")
     plt.show()
+    if save_fig:
+        fig.savefig(save_path)
+    return fig
+def display_multiplanar_color(image, x=1, y=1, z=1, save_fig=False, save_path=None):
+    x=image.shape[0]//2
+    y=image.shape[1]//2
+    z=image.shape[2]//2
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    ax1.imshow(image[x,:,:], cmap='jet')
+    ax1.axis("off")
+    ax2.imshow(image[:,y,:], cmap='jet')
+    ax2.axis("off")
+    ax3.imshow(image[:,:,z], cmap='jet')
+    ax3.axis("off")
+    plt.show()
     return fig
 
-def display_multiplanar_center(image):
-    return display_multiplanar(image, x=image.shape[0]//2, y=image.shape[1]//2, z=image.shape[2]//2)
+def display_multiplanar_center(image,**kwargs):
+    return display_multiplanar(image, x=image.shape[0]//2, y=image.shape[1]//2, z=image.shape[2]//2,**kwargs)
 
-def display_images(image_z, image_0, image_1):
+def display_images(image_z, image_0, image_1, save_fig=False, save_path=None):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
     ax1.imshow(image_0[:, :, image_z], cmap=plt.cm.Greys_r)
     ax1.axis("off")
@@ -55,7 +71,7 @@ def load_model(model_path:str):
     model.train()
     return model
 
-def get_dataloader(dataset='dhcp', num_samples=None, modality='t1'):
+def get_dataloader(dataset='dhcp', num_samples=None, modality='t1',augmentation=False):
     if dataset == 'dhcp':
         data_dir = '/media/hdd/dhcp/dhcp_lores/'
         loaders, val_loader = get_synth_dhcp_dataloader(data_dir=data_dir,
@@ -65,7 +81,7 @@ def get_dataloader(dataset='dhcp', num_samples=None, modality='t1'):
                                                                 output_modalities=[modality],
                                                                 output_dir=data_dir,
                                                                 n_splits=5,
-                                                                augmentation=False,
+                                                                augmentation=augmentation,
                                                                 down_factor=5,)
         train_loader, test_loader = loaders[0]
         return train_loader, test_loader, val_loader
@@ -78,7 +94,7 @@ def get_dataloader(dataset='dhcp', num_samples=None, modality='t1'):
                                                                 output_modalities=[modality],
                                                                 output_dir=data_dir,
                                                                 n_splits=5,
-                                                                augmentation=False,
+                                                                augmentation=augmentation,
                                                                 down_factor=5,)
         train_loader, test_loader = loaders[0]
         return train_loader, test_loader, val_loader
@@ -708,11 +724,13 @@ def eval_hyperfine(image_path: str, model, mu, logvar):
     image_tensor = torch.from_numpy(sitk.GetArrayFromImage(image))
     image_tensor = image_tensor.unsqueeze(0).unsqueeze(0).float().cuda()
     with torch.no_grad():
-        output_tensor = model(image_tensor)
+        output_tensor = model(image_tensor).flip(2)
+    image_tensor = image_tensor.flip(2)
     fig_in = display_multiplanar_center(image_tensor[0,0].cpu().numpy())
     fig_out = display_multiplanar_center(output_tensor[0,0].cpu().numpy())
     kl = kl_forward_prior(model,output_tensor,mu,logvar).cpu().detach()
-    return fig_in, fig_out, kl
+    output_image = sitk.GetImageFromArray(output_tensor[0,0].cpu().numpy())
+    return output_image, fig_in, fig_out, kl
 def eval_tensor(image_tensor, model, mu, logvar):
     image_tensor = image_tensor.cuda()
     with torch.no_grad():
