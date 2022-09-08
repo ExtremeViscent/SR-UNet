@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/scratch/proj/bayunet/HCP_1200'
+data_dir = '/media/hdd/HCP_1200'
 list_dir = glob.glob(op.join(data_dir, '*'))
 list_dir.sort()
 list_basenames = [op.basename(x) for x in list_dir]
@@ -32,9 +32,8 @@ list_masks = [op.join(x,'T1w','brainmask_fs.nii.gz') for x in list_dir]
 # list_images_t2 = list_images_t2[:300]
 
 num_samples = len(list_dir)
-spacing = [1.0,1.0,1.0]
+spacing = [1.5,1.5,5.0]
 spacing = np.array(spacing)
-spacing *= 2.8
 
 
 # def _load(x):
@@ -113,8 +112,8 @@ def _load(x):
         tio.transforms.RescaleIntensity(0., 1.),
         tio.transforms.ToCanonical(),
         tio.transforms.Resample(spacing),
-        tio.transforms.RandomBlur((2,2)),
-        tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=10),
+        tio.transforms.RandomBlur((0,0,0,0,8,8)),
+        # tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=10),
         tio.transforms.Resample((1.,1.,1.)),
     ])
     transform_1_gt = tio.Compose([
@@ -132,7 +131,7 @@ def _load(x):
     transform_2 = tio.Compose([
         tio.Pad(padding),
         tio.transforms.Resize((160,160,160)),
-        tio.transforms.RandomNoise(3,(3,5)),
+        # tio.transforms.RandomNoise(3,(3,5)),
     ])
     transform_2_gt = tio.Compose([
         tio.Pad(padding),
