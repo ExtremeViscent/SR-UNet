@@ -19,7 +19,7 @@ import torchio as tio
 import h5py as h5
 import matplotlib.pyplot as plt
 
-data_dir = '/scratch/proj/bayunet/dhcp_lores'
+data_dir = '/media/hdd/dhcp/dhcp_lores'
 list_basenames = glob.glob(op.join(data_dir,'labels', '*.nii.gz'))
 list_basenames.sort()
 print(len(list_basenames))
@@ -36,9 +36,8 @@ list_basenames = [op.basename(x).split('_')[0] for x in list_images_t1]
 # list_images_t2 = list_images_t2[:300]
 
 num_samples = len(list_basenames)
-spacing = [1.0,1.0,1.0]
+spacing = [2.8,2.8,5.0]
 spacing = np.array(spacing)
-spacing *= 2.8
 # transform = tio.Compose([
 #     tio.transforms.RescaleIntensity(0., 1.),
 #     tio.transforms.ToCanonical(),
@@ -122,7 +121,7 @@ def _load(x):
     transform_1 = tio.Compose([
         tio.transforms.Resample(spacing),
         tio.transforms.RandomBlur((1,1)),
-        tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=20),
+        # tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=20),
         tio.transforms.Resample((1.,1.,1.)),
     ])
     transform_1_gt = tio.Compose([
@@ -139,7 +138,7 @@ def _load(x):
     transform_2 = tio.Compose([
         tio.Pad(padding),
         tio.transforms.Resize((160,160,160)),
-        tio.transforms.RandomNoise(0.5,(0,1)),
+        # tio.transforms.RandomNoise(0.5,(0,1)),
     ])
     transform_2_gt = tio.Compose([
         tio.Pad(padding),
