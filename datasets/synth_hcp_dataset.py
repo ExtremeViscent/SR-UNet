@@ -2,6 +2,7 @@ from glob import glob
 
 from matplotlib import image
 from sklearn.utils import resample
+import torch
 
 from torch.utils.data import Dataset
 
@@ -17,6 +18,8 @@ from tqdm.contrib.concurrent import thread_map
 from multiprocessing import cpu_count
 import torchio as tio
 import h5py as h5
+from torch import nn
+from kornia import augmentation as K
 
 class SynthHCPDataset(Dataset):
     def __init__(self, data_dir, phase="train", num_samples=None, input_modalities=['t1'], output_modalities=['t1'], augmentation=False,down_factor=5):
@@ -67,6 +70,10 @@ class SynthHCPDataset(Dataset):
         self.transform  = tio.Compose([resample_transform,resize_transform])
         self.transform_gt = resize_transform
 
+        self.transform_spatial_1 = K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True)
+        self.transform_spatial_2 = K.RandomAffine3D((15., 20., 20.), p=0.4,keepdim=True)
+        self.transform_intensity_1 = K.RandomMotionBlur3D(3, 35., 0.5, p=0.4,keepdim=True)
+        self.transform_intensity_2 = lambda x: x + torch.randn_like(x)*15 if np.random.rand() < 0.4 else x
         self.images=[]
         self.gts=[]
 
@@ -78,11 +85,19 @@ class SynthHCPDataset(Dataset):
         return self.num_samples
 
     def __getitem__(self, idx):
-        # with h5.File(self.preprocessed_path + f"/{self.list_basenames[idx]}.h5", 'r') as f:
-        #     image = f['image'][:]
-        #     gt = f['gt'][:]
         image = self.images[idx]
         gt = self.gts[idx]
+        if self.augmentation:
+            image = torch.from_numpy(image).cuda().unsqueeze(0)
+            gt = torch.from_numpy(gt).cuda().unsqueeze(0)
+            image = self.transform_spatial_1(image)
+            image = self.transform_spatial_2(image)
+            image = self.transform_intensity_1(image)
+            image = self.transform_intensity_2(image)
+            gt = self.transform_spatial_1(gt, params=self.transform_spatial_1._params)
+            gt = self.transform_spatial_2(gt, params=self.transform_spatial_2._params)
+            image = image.squeeze(0)
+            gt = gt.squeeze(0)
         return image, gt
 
 
