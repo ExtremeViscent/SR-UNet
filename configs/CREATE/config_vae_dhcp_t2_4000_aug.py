@@ -3,7 +3,7 @@ import os
 
 DATA_DIR = "/scratch/prj/bayunet/dhcp_lores"
 OUTPUT_DIR = "/scratch/prj/bayunet/experiments/output_vae_dhcp_t2_4000_aug"
-AUGMENTATION=False
+AUGMENTATION=True
 INPUT_MODALITIES=["t2"]
 OUTPUT_MODALITIES=["t2"]
 BATCH_SIZE=6

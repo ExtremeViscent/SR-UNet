@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --output=/scratch/users/%u/SR-UNet/logs/dhcp_t1_4000_noaug_%j.out
-#SBATCH --job-name=bunet-dhcp
+#SBATCH --output=/scratch/users/%u/SR-UNet/logs/hcp_t2_4000_noaug_%j.out
+#SBATCH --job-name=bunet-hcp
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
@@ -32,6 +32,6 @@ conda activate cai
 nvidia-smi
 
 cd /scratch/users/k21113539/SR-UNet
-python /scratch/users/k21113539/SR-UNet/train_vae_nocai.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_dhcp_t1_4000.py
+python /scratch/users/k21113539/SR-UNet/train_vae_nocai.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_hcp_t2_4000.py
 # torchrun --nnodes $NNODES --master_addr $MASTER_ADDR --master_port $MASTER_PORT --node_rank $NODE_RANK --nproc_per_node $NPROC_PER_NODE /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_hcp_t1.py
 # srun -p gpu -N 2 --gres=gpu:4 --ntasks-per-node=4 python /scratch/users/k21113539/SR-UNet/train_vae_bottleneck.py --config /scratch/users/k21113539/SR-UNet/configs/CREATE/config_vae_hcp_t1.py
