@@ -87,17 +87,19 @@ class SynthHCPDataset(Dataset):
     def __getitem__(self, idx):
         image = self.images[idx]
         gt = self.gts[idx]
-        image = torch.from_numpy(image).cuda().unsqueeze(0)
-        gt = torch.from_numpy(gt).cuda().unsqueeze(0)
         if self.augmentation:
+            image = torch.from_numpy(image).unsqueeze(0)
+            gt = torch.from_numpy(gt).unsqueeze(0)
             image = self.transform_spatial_1(image)
             image = self.transform_spatial_2(image)
             image = self.transform_intensity_1(image)
             image = self.transform_intensity_2(image)
             gt = self.transform_spatial_1(gt, params=self.transform_spatial_1._params)
             gt = self.transform_spatial_2(gt, params=self.transform_spatial_2._params)
-        image = image.squeeze(0)
-        gt = gt.squeeze(0)
+            image = image.squeeze(0)
+            gt = gt.squeeze(0)
+            image = image.numpy()
+            gt = gt.numpy()
         return image, gt
 
 

@@ -224,8 +224,8 @@ def train():
         val_image,val_target = val_loader.dataset.__getitem__(0)
         if not os.path.exists(os.path.join(output_dir, '{}'.format(i))):
             os.makedirs(os.path.join(output_dir, '{}'.format(i)))
-        np.save(os.path.join(output_dir,'{}'.format(i), 'val_image.npy'), val_image.cpu().numpy())
-        np.save(os.path.join(output_dir,'{}'.format(i), 'val_target.npy'), val_target.cpu().numpy())
+        np.save(os.path.join(output_dir,'{}'.format(i), 'val_image.npy'), val_image)
+        np.save(os.path.join(output_dir,'{}'.format(i), 'val_target.npy'), val_target)
 
         model.cuda()
         n_step = 0
@@ -238,8 +238,8 @@ def train():
                 model.enable_fe_loss()
                 logger.info('Using VAE loss', ranks=[0])
             for im,gt in tqdm(train_loader):
-                # im=im.cuda()
-                # gt=gt.cuda()
+                im=im.cuda()
+                gt=gt.cuda()
                 optim.zero_grad()
                 output = model(im)
                 loss = criterion(output, gt)
@@ -263,8 +263,8 @@ def train():
             model.eval()
             with torch.no_grad():
                 for im,gt in tqdm(test_loader):
-                    # im=im.cuda()
-                    # gt=gt.cuda()
+                    im=im.cuda()
+                    gt=gt.cuda()
                     output = model(im)  
                     loss = criterion(output, gt)
                     TBLogger(phase='test', step=n_step_test,loss=loss)
