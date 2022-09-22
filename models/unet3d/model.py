@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch
 import torch.optim as optim
 from torchmetrics import StructuralSimilarityIndexMeasure
+from piqa import SSIM
+from torchmetrics.functional import structural_similarity_index_measure
+from geomloss import SamplesLoss
 
 from colossalai.core import global_context as gpc
 from colossalai.logging import disable_existing_loggers, get_dist_logger
@@ -107,28 +110,38 @@ class Abstract3DUNet(nn.Module):
 class Abstract3DBUNet(Abstract3DUNet):
     def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
                  num_groups=8, num_levels=4, is_segmentation=True, conv_kernel_size=3, pool_kernel_size=2,
-                 conv_padding=1, latent_size=32, alpha=0.8, augmentation=True, recon_loss='mse', **kwargs):
+                 conv_padding=1, latent_size=32, alpha=0.8, augmentation=True, recon_loss_func='mse', div_loss_func='kl', **kwargs):
         super(Abstract3DBUNet, self).__init__(in_channels, out_channels, final_sigmoid, basic_module, f_maps,
                                               layer_order, num_groups, num_levels, is_segmentation, conv_kernel_size,
                                               pool_kernel_size, conv_padding, **kwargs)
-        self.mu = nn.Linear(f_maps[-1], latent_size)
-        self.logvar = nn.Linear(f_maps[-1], latent_size)
         self.alpha = alpha
         self.logger = get_dist_logger()
         self.enc_mu = None
         self.enc_logvar = None
         self.warming_up = True
-        self.kl = None
-        self.mse = None
-        self.recon_loss = recon_loss
+        self.div_loss = None
+        self.recon_loss = None
+        self.recon_loss_func = recon_loss_func
+        self.div_loss_func = div_loss_func
         self.latent_size = latent_size
-        self.latent_to_decode = nn.Linear(latent_size, f_maps[-1])
+        self.augmentation = augmentation
+        self.mu = nn.Sequential(
+            nn.Linear(f_maps[-1], latent_size),
+            nn.LayerNorm(latent_size)
+        )
+        self.logvar = nn.Sequential(
+            nn.Linear(f_maps[-1], latent_size),
+            nn.LayerNorm(latent_size)
+        )
+        self.latent_to_decode = nn.Sequential(
+            nn.Linear(latent_size, f_maps[-1]),
+            nn.LayerNorm(f_maps[-1]),
+        )
         self.transform = nn.Sequential(
             K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True),
             K.RandomMotionBlur3D(3, 35., 0.5, p=0.4,keepdim=True),
             K.RandomAffine3D((15., 20., 20.), p=0.4,keepdim=True),
         )
-        self.augmentation = augmentation
         self.init_weights()
 
     def forward(self, x):
@@ -152,9 +165,10 @@ class Abstract3DBUNet(Abstract3DUNet):
         # self.kl = None
         # self.mse = None
 
-        self.enc_mu = nn.Parameter(mu,requires_grad=False)
-        self.enc_logvar = nn.Parameter(logvar,requires_grad=False)
+        self.enc_mu = nn.Parameter(mu)
+        self.enc_logvar = nn.Parameter(logvar)
         sample = self.sample_from_mu_var(mu, logvar)
+        self.latent = nn.Parameter(sample)
         # sample = MultivariateNormal(mu, torch.exp(logvar))
         x = self.latent_to_decode(sample)
         x = torch.transpose(x, 1, 4)
@@ -185,52 +199,34 @@ class Abstract3DBUNet(Abstract3DUNet):
         return sample
 
     def init_weights(self):
-        nn.init.eye_(self.mu.weight.data)
-        nn.init.zeros_(self.mu.bias.data)
-        nn.init.normal_(self.logvar.weight.data, 0, 0.1)
-        nn.init.zeros_(self.logvar.bias.data)
+        nn.init.eye_(self.mu[0].weight.data)
+        nn.init.zeros_(self.mu[0].bias.data)
+        nn.init.normal_(self.logvar[0].weight.data, 0, 0.1)
+        nn.init.zeros_(self.logvar[0].bias.data)
 
 
     def VAE_loss(self, im, im_hat):
+        recon_loss = 0.
+        div_loss = 0.
 
-        # im = im.squeeze()
         if self.warming_up:
-            mse = torch.nn.MSELoss()(im, im_hat)
-            self.mse = nn.Parameter(mse)
-            return mse
+            recon_loss = torch.nn.MSELoss()(im, im_hat)
+            self.recon_loss = nn.Parameter(recon_loss, requires_grad=False)
+            return recon_loss
         mu, logvar = self.enc_mu, self.enc_logvar
-        # mu, logvar = nn.functional.softmax(mu,dim=1), nn.functional.softmax(logvar,dim=1)
-        kl = torch.sum(0.5 * (torch.exp(logvar) + torch.pow(mu,2) - 1 - logvar))
-        # kl = torch.mean(kl)
-        # kl = KLDivLoss()(mu, logvar)
-        # while kl * self.alpha > 1e+2:
-        #     self.alpha *= 0.5
-        # if self.kl is not None and kl/self.kl > 1000.:
-        #         print('clipped kl {} and {}'.format(kl, self.kl))
-        #         kl = self.kl
-        # print("mu shape: ", mu.shape)
-        # print("logvar shape: ", logvar.shape)
-        # print("kl shape: ", kl.shape)
+        if self.recon_loss_func == 'mse':
+            recon_loss = torch.nn.MSELoss()(im, im_hat)
+        elif self.recon_loss_func == 'ssim':
+            recon_loss = 1 - structural_similarity_index_measure(im, im_hat)
+        self.recon_loss = nn.Parameter(recon_loss,requires_grad=False)
 
-        # err = im - im_hat
-        # serr = torch.square(err)
-        # sse = torch.sum(serr)
-        if self.recon_loss == 'mse':
-            mse = torch.nn.MSELoss()(im, im_hat)
-        elif self.recon_loss == 'ssim':
-            mse = StructuralSimilarityIndexMeasure()(im_hat,im)
-
-        self.mse = nn.Parameter(mse,requires_grad=False)
-        self.kl = nn.Parameter(kl,requires_grad=False)
-        # print("mse: ", mse)
-        # print("kl: ", kl)
-        # self.logger.info(f"MSE: {mse}; KL: {kl*self.alpha}")
-        FE_simple = mse + self.alpha * kl
-        # loss = self.alpha*torch.nn.MSELoss()(im_hat, im) + (1-self.alpha)*FE_simple
-        #print('FE, mse:', mse)
-        #print('FE, kl:', kl)
-        # return mse
-        return FE_simple
+        if self.div_loss_func == 'kl':
+            div_loss = torch.sum(0.5 * (torch.exp(logvar) + torch.pow(mu,2) - 1 - logvar))
+            self.div_loss = nn.Parameter(div_loss,requires_grad=False)
+        elif self.div_loss_func == 'sinkhorn':
+            div_loss = SamplesLoss("sinkhorn")(self.latent.flatten(1), torch.zeros_like(self.latent.flatten(1)))
+            self.div_loss = nn.Parameter(div_loss,requires_grad=False)
+        return recon_loss + self.alpha * div_loss
 
 
 class UNet3D(Abstract3DUNet):
