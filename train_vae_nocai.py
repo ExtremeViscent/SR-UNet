@@ -21,6 +21,7 @@ from models.unet3d.model import BUNet3D, UNet3D
 import importlib
 import SimpleITK as sitk
 from PIL import Image
+from geomloss import SamplesLoss
 
 from torch.utils.tensorboard import SummaryWriter
 import os
@@ -77,47 +78,48 @@ def eval(model, cur_epoch,fold):
     #                 )
     # ckpt = torch.load(ckpt_path)
     # model.load_state_dict(ckpt['state_dict'])
-    image = np.load(os.path.join(output_dir, 'val_image.npy'))
-    target = np.load(os.path.join(output_dir, 'val_target.npy'))
-    image = torch.tensor(image).unsqueeze(0).cuda()
-    target = torch.tensor(target).unsqueeze(0).cuda()
-    model.eval()
-    pred = model(image)
-    image = image.cpu().detach().numpy().astype(np.float32)
-    target = target.cpu().detach().numpy().astype(np.float32)
-    pred = pred.cpu().detach().numpy().astype(np.float32)
-    im_pred = pred[0, 0, pred.shape[2]//2, :, :]
-    im_pred = (im_pred-np.min(im_pred)) / \
-        (np.max(im_pred)-np.min(im_pred))*255
-    im_pred = Image.fromarray(im_pred).convert('RGB')
-    if cur_epoch == 0:
-        if gpc.config.IN_CHANNELS == 2:
-            sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
-                            os.path.join(output_dir, 'image_t1.nii.gz'))
-            sitk.WriteImage(sitk.GetImageFromArray(image[0, 1, :, :, :]),
-                            os.path.join(output_dir, 'image_t2.nii.gz'))
-        else:
-            sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
-                            os.path.join(output_dir, 'image.nii.gz'))
-        sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
-                        os.path.join(output_dir, 'target.nii.gz'))
-        im_image = image[0, 0, image.shape[2]//2, :, :]
-        im_target = target[0,0, image.shape[2]//2, :, :]
-        im_image = (im_image-np.min(im_image)) / \
-            (np.max(im_image)-np.min(im_image))*255
-        im_target = (im_target-np.min(im_target)) / \
-            (np.max(im_target)-np.min(im_target))*255
-        im_image = Image.fromarray(im_image).convert('RGB')
-        im_target = Image.fromarray(im_target).convert('RGB')
-        im_image.save(os.path.join(output_dir, 'image.png'))
-        im_target.save(os.path.join(output_dir, 'target.png'))
-    # sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
-    #                 os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
-    if not os.path.exists(os.path.join(pred_dir, '2d')):
-        os.makedirs(os.path.join(pred_dir, '2d'))
-    if cur_epoch % 10 == 0:
-        im_pred.save(os.path.join(pred_dir, "2d",
-                    '{}.png'.format(cur_epoch)))
+    with torch.no_grad():
+        image = np.load(os.path.join(output_dir, 'val_image.npy'))
+        target = np.load(os.path.join(output_dir, 'val_target.npy'))
+        image = torch.tensor(image).unsqueeze(0).cuda()
+        target = torch.tensor(target).unsqueeze(0).cuda()
+        model.eval()
+        pred = model(image)
+        image = image.cpu().detach().numpy().astype(np.float32)
+        target = target.cpu().detach().numpy().astype(np.float32)
+        pred = pred.cpu().detach().numpy().astype(np.float32)
+        im_pred = pred[0, 0, pred.shape[2]//2, :, :]
+        im_pred = (im_pred-np.min(im_pred)) / \
+            (np.max(im_pred)-np.min(im_pred))*255
+        im_pred = Image.fromarray(im_pred).convert('RGB')
+        if cur_epoch == 0:
+            if gpc.config.IN_CHANNELS == 2:
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
+                                os.path.join(output_dir, 'image_t1.nii.gz'))
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 1, :, :, :]),
+                                os.path.join(output_dir, 'image_t2.nii.gz'))
+            else:
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
+                                os.path.join(output_dir, 'image.nii.gz'))
+            sitk.WriteImage(sitk.GetImageFromArray(target[0, :, :, :]),
+                            os.path.join(output_dir, 'target.nii.gz'))
+            im_image = image[0, 0, image.shape[2]//2, :, :]
+            im_target = target[0, 0, image.shape[2]//2, :, :]
+            im_image = (im_image-np.min(im_image)) / \
+                (np.max(im_image)-np.min(im_image))*255
+            im_target = (im_target-np.min(im_target)) / \
+                (np.max(im_target)-np.min(im_target))*255
+            im_image = Image.fromarray(im_image).convert('RGB')
+            im_target = Image.fromarray(im_target).convert('RGB')
+            im_image.save(os.path.join(output_dir, 'image.png'))
+            im_target.save(os.path.join(output_dir, 'target.png'))
+        # sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
+        #                 os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
+        if not os.path.exists(os.path.join(pred_dir, '2d')):
+            os.makedirs(os.path.join(pred_dir, '2d'))
+        if cur_epoch % 1 == 0:
+            im_pred.save(os.path.join(pred_dir, "2d",
+                        '{}.png'.format(cur_epoch)))
 
 def train():
     torch.autograd.set_detect_anomaly(True)
@@ -191,7 +193,8 @@ def train():
                                 latent_size=gpc.config.LATENT_SIZE,
                                 alpha=gpc.config.ALPHA if gpc.config.ALPHA is not None else 0.00025,
                                 augmentation=getattr(gpc.config,'AUGMENTATION',False),
-                                recon_loss=getattr(gpc.config,'RECON_LOSS','mse'))
+                                recon_loss_func=getattr(gpc.config,'RECON_LOSS','mse'),
+                                div_loss_func=getattr(gpc.config,'DIV_LOSS','kl'))
             criterion = model.VAE_loss
         else:
             if getattr(gpc.config, 'CHECKPOINT', None) is not None:
@@ -244,8 +247,8 @@ def train():
                 output = model(im)
                 loss = criterion(output, gt)
                 TBLogger(phase='train', step=n_step,loss=loss,LR=lr_scheduler.get_last_lr()[0])
-                if getattr(model,'kl') is not None:
-                    TBLogger(phase='train', step=n_step,KL=model.kl,MSE=model.mse, beta=beta_scheduler.get_beta(),beta_KLD=beta_scheduler.get_beta()*model.kl)
+                if getattr(model,'div_loss') is not None:
+                    TBLogger(phase='train', step=n_step,KL=model.div_loss,MSE=model.recon_loss, beta=beta_scheduler.get_beta(),beta_KLD=beta_scheduler.get_beta()*model.div_loss)
                 try:
                     loss.backward()
                     torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1.0)
@@ -268,14 +271,14 @@ def train():
                     output = model(im)  
                     loss = criterion(output, gt)
                     TBLogger(phase='test', step=n_step_test,loss=loss)
-                    if getattr(model,'kl') is not None:
-                        TBLogger(phase='test', step=n_step_test,KL=model.kl,MSE=model.mse)
+                    if getattr(model,'div_loss') is not None:
+                        TBLogger(phase='test', step=n_step_test,KL=model.div_loss,MSE=model.recon_loss)
                     n_step_test+=1
             logger.info('epoch:{}/{}'.format(epoch,gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Test loss:{}'.format(loss), ranks=[0])
-            if getattr(model,'kl') is not None:
-                logger.info('KL:{}'.format(model.kl), ranks=[0])
-                logger.info('MSE:{}'.format(model.mse), ranks=[0])
+            if getattr(model,'div_loss') is not None:
+                logger.info('KL:{}'.format(model.div_loss), ranks=[0])
+                logger.info('MSE:{}'.format(model.recon_loss), ranks=[0])
                 logger.info('Average mu:{}'.format(model.enc_mu.mean()), ranks=[0])
                 logger.info('Average logvar:{}'.format(model.enc_logvar.mean()), ranks=[0])
             eval(model,epoch,i)
