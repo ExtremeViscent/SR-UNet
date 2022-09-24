@@ -1,4 +1,5 @@
 from copy import deepcopy
+from functools import reduce
 import torch.nn as nn
 import torch
 import torch.optim as optim
@@ -204,6 +205,19 @@ class Abstract3DBUNet(Abstract3DUNet):
         nn.init.normal_(self.logvar[0].weight.data, 0, 0.1)
         nn.init.zeros_(self.logvar[0].bias.data)
 
+    def patch_mse(im,im_hat, kernel_size=8, stride=4):
+        se = (im - im_hat)**2
+        se = se.unfold(2, kernel_size, stride=stride).unfold(3, kernel_size, stride=stride).unfold(4, kernel_size, stride=stride)
+        se_ = torch.zeros((se.shape[0],se.shape[1],se.shape[2],se.shape[3],se.shape[4]))
+        for i in range(se.shape[0]):
+            for j in range(se.shape[1]):
+                for k in range(se.shape[2]):
+                    for l in range(se.shape[3]):
+                        for m in range(se.shape[4]):
+                            se_[i,j,k,l,m] = (torch.mean(se[i,j,k,l,m]) - torch.min(se[i,j,k,l,m]))/(torch.max(se[i,j,k,l,m]) - torch.min(se[i,j,k,l,m]))
+        mse = torch.mean(se_)
+        return mse
+
 
     def VAE_loss(self, im, im_hat):
         recon_loss = 0.
@@ -218,6 +232,8 @@ class Abstract3DBUNet(Abstract3DUNet):
             recon_loss = torch.nn.MSELoss()(im, im_hat)
         elif self.recon_loss_func == 'ssim':
             recon_loss = 1 - structural_similarity_index_measure(im, im_hat)
+        elif self.recon_loss_func == 'patch_mse':
+            recon_loss = self.patch_mse(im, im_hat)
         self.recon_loss = nn.Parameter(recon_loss,requires_grad=False)
 
         if self.div_loss_func == 'kl':
