@@ -117,7 +117,7 @@ def eval(model, cur_epoch,fold):
         #                 os.path.join(pred_dir, '{}.nii.gz'.format(cur_epoch)))
         if not os.path.exists(os.path.join(pred_dir, '2d')):
             os.makedirs(os.path.join(pred_dir, '2d'))
-        if cur_epoch % 1 == 0:
+        if cur_epoch % 10 == 0:
             im_pred.save(os.path.join(pred_dir, "2d",
                         '{}.png'.format(cur_epoch)))
 
