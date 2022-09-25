@@ -205,17 +205,14 @@ class Abstract3DBUNet(Abstract3DUNet):
         nn.init.normal_(self.logvar[0].weight.data, 0, 0.1)
         nn.init.zeros_(self.logvar[0].bias.data)
 
-    def patch_mse(im,im_hat, kernel_size=8, stride=4):
+    def patch_mse(self, im,im_hat, kernel_size=8, stride=4):
         se = (im - im_hat)**2
-        se = se.unfold(2, kernel_size, stride=stride).unfold(3, kernel_size, stride=stride).unfold(4, kernel_size, stride=stride)
-        se_ = torch.zeros((se.shape[0],se.shape[1],se.shape[2],se.shape[3],se.shape[4]))
-        for i in range(se.shape[0]):
-            for j in range(se.shape[1]):
-                for k in range(se.shape[2]):
-                    for l in range(se.shape[3]):
-                        for m in range(se.shape[4]):
-                            se_[i,j,k,l,m] = (torch.mean(se[i,j,k,l,m]) - torch.min(se[i,j,k,l,m]))/(torch.max(se[i,j,k,l,m]) - torch.min(se[i,j,k,l,m]))
-        mse = torch.mean(se_)
+        se = se.unfold(2, kernel_size, stride).unfold(3, kernel_size, stride).unfold(4, kernel_size, stride)
+        max_ = se.max(-1).values.max(-1).values.max(-1).values
+        min_ = se.min(-1).values.min(-1).values.min(-1).values
+        mse = se.mean(-1).mean(-1).mean(-1)
+        mse = (mse - min_)/(max_ - min_)
+        mse = torch.mean(mse)
         return mse
 
 
