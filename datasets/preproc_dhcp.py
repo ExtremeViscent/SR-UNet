@@ -27,6 +27,7 @@ list_images_t1 = [x.replace('_desc-drawem9_dseg.nii.gz', '_T1w_brain.nii.gz') fo
 list_images_t2 = [x.replace('_desc-drawem9_dseg.nii.gz', '_T2w_brain.nii.gz') for x in list_basenames]
 list_images_t1 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T1w_brain_1mm.nii.gz') for x in list_images_t1]
 list_images_t2 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T2w_brain_1mm.nii.gz') for x in list_images_t2]
+# TODO: delete this
 list_images_t1 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t1')) for x in list_images_t1]
 list_images_t2 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t2')) for x in list_images_t2]
 list_basenames = [op.basename(x).split('_')[0] for x in list_images_t1]
@@ -36,6 +37,7 @@ list_basenames = [op.basename(x).split('_')[0] for x in list_images_t1]
 # list_images_t2 = list_images_t2[:300]
 
 num_samples = len(list_basenames)
+# Low resolution of fake Hyperfine
 spacing = [2.8,2.8,5.0]
 spacing = np.array(spacing)
 # transform = tio.Compose([
@@ -100,18 +102,11 @@ spacing = np.array(spacing)
 #     gt_t1 = sitk.GetArrayFromImage(gt_t1)
 #     gt_t2 = sitk.GetArrayFromImage(gt_t2)
 #     image_t1 = (image_t1 - np.mean(image_t1)) / np.std(image_t1)
-#     image_t2 = (image_t2 - np.mean(image_t2)) / np.std(image_t2)
-#     gt_t1 = (gt_t1 - np.mean(gt_t1)) / np.std(gt_t1)
-#     gt_t2 = (gt_t2 - np.mean(gt_t2)) / np.std(gt_t2)
-#     if not op.exists(preprocessed_path):
-#         os.makedirs(preprocessed_path)
-#     with h5.File(op.join(preprocessed_path, basename + '.h5'), 'w') as f:
-#         f.create_dataset('image_t1', data=image_t1)
-#         f.create_dataset('image_t2', data=image_t2)
-#         f.create_dataset('gt_t1', data=gt_t1)
-#         f.create_dataset('gt_t2', data=gt_t2)
-
+#     image_t2 = (itio.
 def _load(x):
+    '''
+    Load the data from the path to the memory (not VRAM)
+    '''
     img_t1, img_t2, basename = x
     preprocessed_path = op.join(data_dir, "preprocessed_h5")
     subject = tio.Subject(
@@ -155,6 +150,8 @@ def _load(x):
         f.create_dataset('gt_t2', data=subject_gt.image_t2.data[0])
 
 def load(list_images_t1,list_images_t2,list_basenames):
+    # Not recommended to use multiprocessing for unstable output
+    # The torchio is already using multiprocessing
     thread_map(_load, zip(list_images_t1, list_images_t2,list_basenames), max_workers=1, total=num_samples)
 
 load(list_images_t1,list_images_t2,list_basenames)
