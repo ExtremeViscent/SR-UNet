@@ -24,9 +24,9 @@ from kornia import augmentation as K
 class SynthdHCPDataset(Dataset):
     def __init__(self, data_dir, phase="train", num_samples=None, input_modalities=['t1'], output_modalities=['t1'], augmentation=False,down_factor=5):
         self.data_dir = data_dir
-        self.phase = phase
-        self.augmentation = augmentation
-        self.down_factor = down_factor
+        self.phase = phase # train, val, test
+        self.augmentation = augmentation 
+        self.down_factor = down_factor # Previously for pre-processing, now deprecated
         self.input_dual_modal = True if len(input_modalities) == 2 else False
         self.output_dual_modal = True if len(output_modalities) == 2 else False
         self.input_modalities = input_modalities
@@ -75,6 +75,8 @@ class SynthdHCPDataset(Dataset):
         logging.info(f'Creating dataset with {self.num_samples} examples')
         logging.info(f'length of list_images_t1: {len(self.list_images_t1)}')
 
+        # TODO - delete this##################
+
         spacing = [1.0,1.0,1.0]
         spacing = np.array(spacing)
         spacing *= down_factor
@@ -84,7 +86,7 @@ class SynthdHCPDataset(Dataset):
         resize_transform = tio.Resize(target_shape=target_shape)
         resample_transform = tio.Resample(target=spacing)
         self.transform  = tio.Compose([resample_transform,resize_transform])
-        # self.transform_gt = resize_transform
+        ####################################
 
         self.transform_spatial_1 = K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True)
         self.transform_spatial_2 = K.RandomAffine3D((15., 20., 20.), p=0.4,keepdim=True)
@@ -110,6 +112,7 @@ class SynthdHCPDataset(Dataset):
         if self.augmentation:
             image = torch.from_numpy(image).unsqueeze(0)
             gt = torch.from_numpy(gt).unsqueeze(0)
+            # Parameters generated from here:
             image = self.transform_spatial_1(image)
             image = self.transform_spatial_2(image)
             image = self.transform_intensity_1(image)
@@ -149,6 +152,8 @@ class SynthdHCPDataset(Dataset):
                 image = image.astype(np.float32)
                 gt = gt.astype(np.float32)
             return image, gt
+
+        #######TODO - delete this##################
         image_t1 = sitk.ReadImage(img_t1)
         image_t2 = sitk.ReadImage(img_t2)
         gt_t1 = image_t1
@@ -179,12 +184,10 @@ class SynthdHCPDataset(Dataset):
             f.create_dataset('image', data=image)
             f.create_dataset('gt', data=gt)
         return image, gt
-        
+        ###########################################
 
     def load(self):
-        # image_save_path = op.join(self.data_dir, 'images_{}_{}.npy'.format(self.input_modalities, self.output_modalities))
-
-        # pool = mp.Pool(mp.cpu_count()-16)
+        # Load images into memory
         ret = thread_map(self._load, zip(self.list_images_t1, self.list_images_t2, self.list_labels,self.list_basenames), max_workers=1, total=self.num_samples)
         # ret = pool.imap_unordered(pmap, trange(num_samples))
         # pool.close()
@@ -200,7 +203,7 @@ class SynthdHCPDataset(Dataset):
             
         self.images = np.array(images)
         self.gts = np.array(gts)
-
+# TODO - delete this
 class SynthdHCPDatasetTIO(tio.SubjectsDataset):
     def __init__(self, data_dir, phase="train", num_samples=None, input_modalities=['t1'], output_modalities=['t1'], augmentation=False,down_factor=5):
         self.data_dir = data_dir
