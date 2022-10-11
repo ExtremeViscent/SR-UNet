@@ -1,3 +1,4 @@
 from datasets.synth_dhcp_dataset import SynthdHCPDataset, SynthdHCPDatasetTIO
 from datasets.synth_hcp_dataset import SynthHCPDataset,SynthHCPDatasetTIO
 from datasets.synth_brats_dataset import SynthBraTSDataset
+from datasets.synth_dolphin_dataset import SynthDolphinDataset

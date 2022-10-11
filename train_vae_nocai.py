@@ -16,7 +16,7 @@ from colossalai.trainer import Trainer, hooks
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader
+from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader, get_synth_dolphin_dataloader
 from models.unet3d.model import BUNet3D, UNet3D
 import importlib
 import SimpleITK as sitk
@@ -175,6 +175,19 @@ def train():
                                                             n_splits=n_splits,
                                                             augmentation=gpc.config.AUGMENTATION,
                                                             down_factor=gpc.config.DOWN_FACTOR,)
+    elif gpc.config.DATASET == 'Dolphin':
+        dataloaders, val_loader = get_synth_dolphin_dataloader(data_dir=gpc.config.DATA_DIR,
+                                                            batch_size=gpc.config.BATCH_SIZE,
+                                                            num_samples=gpc.config.NUM_SAMPLES,
+                                                            input_modalities=gpc.config.INPUT_MODALITIES,
+                                                            output_modalities=gpc.config.OUTPUT_MODALITIES,
+                                                            output_dir=output_dir,
+                                                            n_splits=n_splits,
+                                                            augmentation=gpc.config.AUGMENTATION,
+                                                            down_factor=gpc.config.DOWN_FACTOR,)
+
+
+    logger.info('Build model')
     WARMUP_EPOCHS = getattr(gpc.config, 'WARMUP_EPOCHS', None)
     for i in range(0, 5):
         logger.info('Training fold {}'.format(i), ranks=[0])
@@ -247,7 +260,7 @@ def train():
                 output = model(im)
                 loss = criterion(output, gt)
                 TBLogger(phase='train', step=n_step,loss=loss,LR=lr_scheduler.get_last_lr()[0])
-                if getattr(model,'div_loss') is not None:
+                if getattr(model,'div_loss', None) is not None:
                     TBLogger(phase='train', step=n_step,KL=model.div_loss,MSE=model.recon_loss, beta=beta_scheduler.get_beta(),beta_KLD=beta_scheduler.get_beta()*model.div_loss)
                 try:
                     loss.backward()
@@ -271,12 +284,12 @@ def train():
                     output = model(im)  
                     loss = criterion(output, gt)
                     TBLogger(phase='test', step=n_step_test,loss=loss)
-                    if getattr(model,'div_loss') is not None:
+                    if getattr(model,'div_loss', None) is not None: 
                         TBLogger(phase='test', step=n_step_test,KL=model.div_loss,MSE=model.recon_loss)
                     n_step_test+=1
             logger.info('epoch:{}/{}'.format(epoch,gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Test loss:{}'.format(loss), ranks=[0])
-            if getattr(model,'div_loss') is not None:
+            if getattr(model,'div_loss', None) is not None:
                 logger.info('KL:{}'.format(model.div_loss), ranks=[0])
                 logger.info('MSE:{}'.format(model.recon_loss), ranks=[0])
                 logger.info('Average mu:{}'.format(model.enc_mu.mean()), ranks=[0])

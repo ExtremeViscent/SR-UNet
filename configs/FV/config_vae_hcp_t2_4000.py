@@ -2,7 +2,7 @@ from colossalai.amp import AMP_TYPE
 import os
 
 DATA_DIR = "/media/hdd/HCP_1200"
-OUTPUT_DIR = "/media/hdd/viscent/SR-UNet/experiments/output_vae_hcp_t2_4000"
+OUTPUT_DIR = "/home/levibaljer/SR-UNet/experiments/output_vae_hcp_t2_4000"
 AUGMENTATION=False
 INPUT_MODALITIES=["t2"]
 OUTPUT_MODALITIES=["t2"]
