@@ -256,7 +256,7 @@ def train():
                 output = model(im)
                 loss = criterion(output, gt)
                 TBLogger(phase='train', step=n_step,loss=loss,LR=lr_scheduler.get_last_lr()[0])
-                if getattr(model,'div_loss') is not None:
+                if getattr(model,'div_loss', None) is not None:
                     TBLogger(phase='train', step=n_step,KL=model.div_loss,MSE=model.recon_loss, beta=beta_scheduler.get_beta(),beta_KLD=beta_scheduler.get_beta()*model.div_loss)
                 try:
                     loss.backward()
@@ -280,12 +280,12 @@ def train():
                     output = model(im)  
                     loss = criterion(output, gt)
                     TBLogger(phase='test', step=n_step_test,loss=loss)
-                    if getattr(model,'div_loss') is not None:
+                    if getattr(model,'div_loss', None) is not None:
                         TBLogger(phase='test', step=n_step_test,KL=model.div_loss,MSE=model.recon_loss)
                     n_step_test+=1
             logger.info('epoch:{}/{}'.format(epoch,gpc.config.NUM_EPOCHS), ranks=[0])
             logger.info('Test loss:{}'.format(loss), ranks=[0])
-            if getattr(model,'div_loss') is not None:
+            if getattr(model,'div_loss', None) is not None:
                 logger.info('KL:{}'.format(model.div_loss), ranks=[0])
                 logger.info('MSE:{}'.format(model.recon_loss), ranks=[0])
                 logger.info('Average mu:{}'.format(model.enc_mu.mean()), ranks=[0])
