@@ -211,7 +211,7 @@ class Abstract3DBUNet(Abstract3DUNet):
         max_ = se.max(-1).values.max(-1).values.max(-1).values
         min_ = se.min(-1).values.min(-1).values.min(-1).values
         mse = se.mean(-1).mean(-1).mean(-1)
-        mse = (mse - min_)/(max_ - min_)
+        mse = (mse - min_)/(max_ - min_ + 1e-8)
         mse = torch.mean(mse)
         return mse
 
