@@ -122,7 +122,10 @@ def eval(model, cur_epoch,fold):
                         '{}.png'.format(cur_epoch)))
 
 def train():
+    # Debug: find anormaly 
     torch.autograd.set_detect_anomaly(True)
+
+    # Rewrite this part (TODO)
     parser = colossalai.get_default_parser()
     parser.add_argument('--from_torch', default=False, action='store_true')
     args = parser.parse_args()
@@ -133,17 +136,23 @@ def train():
         args.config = './config.py'
     port = 11451
     success = False
+    # Find a free port (TODO: delete this part)
     while not success:
         try:
             colossalai.launch(args.config,0,1,'localhost',port)
             success = True
         except:
             port+=1
+
+    # TODO: Get rid of colossialai
     logger = get_dist_logger()
+
     output_dir = gpc.config.OUTPUT_DIR
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
     logger.info('Build data loader')
+    # For KFold cross validation, not needed for now
     n_splits = gpc.config.N_SPLITS if gpc.config.N_SPLITS is not None else 5
     if gpc.config.DATASET == 'dHCP':
         dataloaders, val_loader = get_synth_dhcp_dataloader(data_dir=gpc.config.DATA_DIR,

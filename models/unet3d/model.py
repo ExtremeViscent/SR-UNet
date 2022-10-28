@@ -138,6 +138,7 @@ class Abstract3DBUNet(Abstract3DUNet):
             nn.Linear(latent_size, f_maps[-1]),
             nn.LayerNorm(f_maps[-1]),
         )
+        # Junk for now
         self.transform = nn.Sequential(
             K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True),
             K.RandomMotionBlur3D(3, 35., 0.5, p=0.4,keepdim=True),
@@ -147,6 +148,7 @@ class Abstract3DBUNet(Abstract3DUNet):
 
     def forward(self, x):
         # encoder part
+        # Line below is for debugging, junk for now
         if self.augmentation:
             x = self.transform(x)
         encoders_features = []
@@ -185,6 +187,7 @@ class Abstract3DBUNet(Abstract3DUNet):
         x = self.final_conv(x)
 
         # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs logits
+        # TODO: delete this
         if not self.training and self.final_activation is not None:
             x = self.final_activation(x)
 
