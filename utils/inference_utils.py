@@ -19,6 +19,8 @@ import h5py as h5
 from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader
 import torchio as tio
 from tqdm.notebook import tqdm
+from skimage.transform import resize, rescale
+from scipy.ndimage import zoom
 
 # Callback invoked by the IPython interact method for scrolling and modifying the alpha blending
 # of an image stack of two images that occupy the same physical space.
@@ -28,7 +30,10 @@ def display_image(image_z, image):
     plt.axis("off")
     plt.show()
 
-def display_multiplanar(image, x=1, y=1, z=1, save_fig=False, save_path=None):
+def display_multiplanar(image, x=1, y=1, z=1, save_fig=False, save_path=None, spacing=None):
+    if spacing:
+        image = zoom(image, spacing)
+    plt.figure(figsize=(20, 10))
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
     fig.set_facecolor('black')
     ax1.imshow(image[x,:,:], cmap=plt.cm.Greys_r)

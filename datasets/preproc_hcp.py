@@ -109,12 +109,10 @@ def _load(x):
     )
     transform_1 = tio.Compose([
         tio.Mask(masking_method='mask'),
-        tio.transforms.RescaleIntensity(0., 1.),
-        tio.transforms.ToCanonical(),
+        tio.transforms.RescaleIntensity((0., 1.)),
         tio.transforms.Resample(spacing),
-        tio.transforms.RandomBlur((0,0,0,0,8,8)),
-        # tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=10),
         tio.transforms.Resample((1.,1.,1.)),
+        tio.transforms.RandomGamma((0.4,0.4))
     ])
     transform_1_gt = tio.Compose([
         tio.Mask(masking_method='mask'),
@@ -131,7 +129,6 @@ def _load(x):
     transform_2 = tio.Compose([
         tio.Pad(padding),
         tio.transforms.Resize((160,160,160)),
-        # tio.transforms.RandomNoise(3,(3,5)),
     ])
     transform_2_gt = tio.Compose([
         tio.Pad(padding),
