@@ -7,6 +7,7 @@
 #SBATCH -N 1
 #SBATCH -n 9
 #SBATCH -t 40:00:00
+#SBATCH --mem-per-cpu=10240
 
 
 export MASTER_PORT=11451
