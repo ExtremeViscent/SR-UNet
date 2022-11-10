@@ -202,3 +202,7 @@ cython_debug/
 
 # Built Visual Studio Code Extensions
 *.vsix
+*.pt
+
+git filter-branch --index-filter \
+    'git rm -rf --cached --ignore-unmatch inference/publish_journal/latent_hcp.pt' HEAD
