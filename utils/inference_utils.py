@@ -744,3 +744,9 @@ def eval_tensor(image_tensor, model, mu, logvar):
     display_multiplanar_center(output_tensor[0,0].cpu().numpy())
     kl = kl_forward_prior(model,output_tensor,mu,logvar).cpu().detach()
     print("KL: ",kl)
+def kl_forward_latent(self, x):
+    with torch.no_grad():
+        # encoder part
+        for encoder in self.encoders:
+            x = encoder(x)
+        return x
