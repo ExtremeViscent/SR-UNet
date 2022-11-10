@@ -65,7 +65,7 @@ class TensorBoardLogger():
         
     def __call__(self, metrics: dict, step):
         for key, value in metrics.items():
-            self.writer.add_scalar(key, value)
+            self.writer.add_scalar(key, value, step)
 
 class BetaScheduler():
     def __init__(self, model, min=0,max=0.0001, cycle_len=1000):
@@ -154,9 +154,9 @@ def weights_init(m):
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
 
-def eval(model, nz, device, n_steps, output_dir):
+def eval(model, nz, n_steps, output_dir):
     model.eval()
-    noise = torch.randn(1, nz, 1, 1, 1, device=device)
+    noise = torch.randn(1, nz, 1, 1, 1).cuda()
     with torch.no_grad():
         fake = model(noise).detach().cpu()
         image = fake[0,0,80,:,:]
@@ -233,29 +233,28 @@ def train():
         train_loader, test_loader = dataloaders[i]
         
         ## Define models
-        device = torch.device("cuda:0" if (torch.cuda.is_available() and ngpu > 0) else "cpu")
-        netG = Generator(ngpu).to(device)
+        netG = Generator(ngpu).cuda()
         netG.apply(weights_init)
-        netD = Discriminator(ngpu).to(device)
+        netD = Discriminator(ngpu).cuda()
         netD.apply(weights_init)
 
         logger.info('Initializing K-Fold', ranks=[0])
         optimG = torch.optim.Adam(
             netG.parameters(),
             lr=gpc.config.LR,
-            betas=(0.9, 0.999)
+            betas=(0.5, 0.999)
         )
         optimD = torch.optim.Adam(
             netD.parameters(),
             lr=gpc.config.LR,
-            betas=(0.9, 0.999)
+            betas=(0.5, 0.999)
         )
         # Initialize BCELoss function
         criterion = nn.BCELoss()
 
         # Create batch of latent vectors that we will use to visualize
         #  the progression of the generator
-        fixed_noise = torch.randn(64, nz, 1, 1, device=device)
+        fixed_noise = torch.randn(1, nz, 1, 1, 1).cuda()
 
         # Establish convention for real and fake labels during training
         real_label = 1.
@@ -269,20 +268,21 @@ def train():
 
 
         for epoch in range(gpc.config.NUM_EPOCHS):
-            netG.train()
-            netD.train()
+            netG.cuda()
+            netD.cuda()
             for _,gt in tqdm(train_loader):
+                netG.train()
+                netD.train()
                 gt=gt.cuda()
                 netD.zero_grad()
-                label = torch.full((gt.size(0),), real_label, device=device)
+                label = torch.full((gt.size(0),), real_label).cuda()
                 output = netD(gt).view(-1)
                 errD_real = criterion(output, label)
                 errD_real.backward()
                 D_x = output.mean().item()
-
                 # Train with all-fake batch
                 # Generate batch of latent vectors
-                noise = torch.randn(gt.size(0), nz, 1, 1, 1, device=device)
+                noise = torch.randn(gt.size(0), nz, 1, 1, 1).cuda()
                 # Generate fake image batch with G
                 fake = netG(noise)
                 label.fill_(fake_label)
@@ -312,14 +312,14 @@ def train():
                 lr_schedulerG.step()
                 lr_schedulerD.step()
                 TBLogger({'loss_D':errD.item(),'loss_G':errG.item()},step=n_step)
-                eval(netG, nz, device, n_step, output_dir)
-        
-        logger.info('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                % (epoch, gpc.config.NUM_EPOCHS, i, len(train_loader),
-                    errD.item(), errG.item(), D_x, D_G_z1, D_G_z2), ranks=[0])
+                eval(netG, nz, n_step, output_dir)
+            logger.info('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                    % (epoch, gpc.config.NUM_EPOCHS, i, len(train_loader),
+                        errD.item(), errG.item(), D_x, D_G_z1, D_G_z2), ranks=[0])
         
 
             
 
 if __name__ == '__main__':
+    print(torch.cuda.is_available())
     train()
