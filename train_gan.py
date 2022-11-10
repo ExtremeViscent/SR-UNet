@@ -160,9 +160,9 @@ def eval(model, nz, device, n_steps, output_dir):
     with torch.no_grad():
         fake = model(noise).detach().cpu()
         image = fake[0,0,80,:,:]
-        fig = plt.figure()
-        plt.imshow(image)
-        plt.savefig(op.join(output_dir,f'image_{n_steps}.png'))
+        image = Image.fromarray((image.numpy() * 255).astype(np.uint8), 'L')
+        image.save(os.path.join(output_dir, f'fake_{n_steps}.png'))
+        
 
 
 def train():
@@ -312,11 +312,12 @@ def train():
                 lr_schedulerG.step()
                 lr_schedulerD.step()
                 TBLogger({'loss_D':errD.item(),'loss_G':errG.item()},step=n_step)
+                eval(netG, nz, device, n_step, output_dir)
         
         logger.info('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                 % (epoch, gpc.config.NUM_EPOCHS, i, len(train_loader),
                     errD.item(), errG.item(), D_x, D_G_z1, D_G_z2), ranks=[0])
-        eval(netG, nz, device, n_step, output_dir)
+        
 
             
 
