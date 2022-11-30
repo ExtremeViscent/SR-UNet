@@ -27,9 +27,9 @@ list_images_t1 = [op.join(data_dir,x,x+'_t1.nii.gz') for x in list_basenames]
 list_images_t2 = [op.join(data_dir,x,x+'_t2.nii.gz') for x in list_basenames]
 list_masks = [op.join(data_dir,x,x+'_seg.nii.gz') for x in list_basenames]
 num_samples = len(list_dir)
-spacing = [1.0,1.0,1.0]
+spacing = [1.5,1.5,5.0]
 spacing = np.array(spacing)
-spacing *= 2.8
+
 
 def _load(x):
     img_t1, img_t2, mask, basename = x
@@ -40,13 +40,15 @@ def _load(x):
         mask = tio.LabelMap(mask)
     )
     transform_1 = tio.Compose([
+        tio.transforms.RescaleIntensity((0., 1.)),
         tio.transforms.Resample(spacing),
-        tio.transforms.RandomBlur((1,1)),
-        tio.transforms.RandomMotion(degrees=5.,translation=0.5,num_transforms=3),
-        tio.transforms.RandomNoise(5,(3,5)),
+        tio.transforms.ToCanonical(),
         tio.transforms.Resample((1.,1.,1.)),
+        tio.transforms.RandomGamma((0.2,0.2))
     ])
     transform_1_gt = tio.Compose([
+        tio.transforms.RescaleIntensity(0., 1.),
+        tio.transforms.ToCanonical(),
         tio.transforms.Resample((1.,1.,1.)),
     ])
     subject_gt = transform_1_gt(subject)
@@ -65,14 +67,6 @@ def _load(x):
     ])
     subject_gt = transform_2_gt(subject_gt)
     subject = transform_2(subject)
-    image_t1_array = subject.image_t1.data[0]
-    image_t2_array = subject.image_t2.data[0]
-    gt_t1_array = subject_gt.image_t1.data[0]
-    gt_t2_array = subject_gt.image_t2.data[0]
-    image_t1_array = (image_t1_array - image_t1_array.min()) / (image_t1_array.max() - image_t1_array.min())
-    image_t2_array = (image_t2_array - image_t2_array.min()) / (image_t2_array.max() - image_t2_array.min())
-    gt_t1_array = (gt_t1_array - gt_t1_array.min()) / (gt_t1_array.max() - gt_t1_array.min())
-    gt_t2_array = (gt_t2_array - gt_t2_array.min()) / (gt_t2_array.max() - gt_t2_array.min())
     if not op.exists(preprocessed_path):
         os.makedirs(preprocessed_path)
     with h5.File(op.join(preprocessed_path, basename + '.h5'), 'w') as f:
