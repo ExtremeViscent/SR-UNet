@@ -18,3 +18,7 @@ torchio
 antspyx
 torchmetrics
 kornia
+geomloss
+scikit-optimize
+seaborn
+piqa
