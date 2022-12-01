@@ -30,6 +30,99 @@ import os.path as op
 import time
 from tqdm import tqdm
 import numpy as np
+import hiddenlayer as hl
+from torchviz import make_dot
+
+
+class custom_MSE(torch.nn.MSELoss):
+    def forward(self, input, target):
+        input = input.squeeze(1)
+        return super(custom_MSE, self).forward(input, target)
+
+class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
+    def __init__(self, checkpoint_dir, output_dir, dataloader, fold, priority=10):
+        super(SaveAndEvalByEpochHook, self).__init__(priority=priority)
+        self.checkpoint_dir = checkpoint_dir
+        self.output_dir = output_dir
+        self.dataloader = dataloader
+        self.fold = fold
+        self.image_dir = os.path.join(self.output_dir, 'images')
+        self.target_dir = os.path.join(self.output_dir, 'targets')
+        self.pred_dir = os.path.join(self.output_dir, 'preds')
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+        if not os.path.exists(self.pred_dir):
+            os.makedirs(self.pred_dir)
+        if not os.path.exists(os.path.join(self.pred_dir, '2d')):
+            os.makedirs(os.path.join(self.pred_dir, '2d'))
+        self.logger = get_dist_logger()
+
+    # def after_test_iter(self, trainer, output, label, loss):
+    #     model = trainer.engine.model
+    #     kl, mse = model.get_metrics()
+    #     self.logger.info('Epoch: {} MSE: {} KL: {}'.format(trainer.cur_epoch, mse, kl))
+
+
+    def after_train_epoch(self, trainer):
+        model = trainer.engine.model
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        torch.save(dict(state_dict=model.state_dict()),
+                   os.path.join(self.checkpoint_dir, '{}.pth'.format(trainer.cur_epoch)))
+        image, target = self.dataloader.dataset.__getitem__(0)
+        image = torch.tensor(image).unsqueeze(0).cuda()
+        target = torch.tensor(target).unsqueeze(0).cuda()
+        _image = image
+        model.eval()
+        pred = trainer.engine(image)
+        _pred = pred
+        image = image.cpu().detach().numpy().astype(np.float32)
+        target = target.cpu().detach().numpy().astype(np.float32)
+        pred = pred.cpu().detach().numpy().astype(np.float32)
+        im_pred = pred[0, 0, 48, :, :]
+        im_pred = (im_pred-np.min(im_pred)) / \
+            (np.max(im_pred)-np.min(im_pred))*255
+        im_pred = Image.fromarray(im_pred).convert('RGB')
+        if trainer.cur_epoch == 0:
+            # graph = hl.build_graph(model, _image)
+            # graph.theme = hl.graph.THEMES['blue'].copy()
+            # graph.save(os.path.join(self.output_dir, 'graph.png'),format='png')
+            make_dot(_pred,params=dict(model.named_parameters())).render(os.path.join(self.output_dir, 'graph_1.png'))
+            if gpc.config.IN_CHANNELS == 2:
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
+                                os.path.join(self.output_dir, 'image_t1.nii.gz'))
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 1, :, :, :]),
+                                os.path.join(self.output_dir, 'image_t2.nii.gz'))
+            else:
+                sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
+                                os.path.join(self.output_dir, 'image.nii.gz'))
+            sitk.WriteImage(sitk.GetImageFromArray(target[0, 0, :, :, :]),
+                            os.path.join(self.output_dir, 'target.nii.gz'))
+            im_image = image[0, 0, 48, :, :]
+            im_target = target[0, 0, 48, :, :]
+            im_image = (im_image-np.min(im_image)) / \
+                (np.max(im_image)-np.min(im_image))*255
+            im_target = (im_target-np.min(im_target)) / \
+                (np.max(im_target)-np.min(im_target))*255
+            im_image = Image.fromarray(im_image).convert('RGB')
+            im_target = Image.fromarray(im_target).convert('RGB')
+            im_image.save(os.path.join(self.output_dir, 'image.png'))
+            im_target.save(os.path.join(self.output_dir, 'target.png'))
+        sitk.WriteImage(sitk.GetImageFromArray(pred[0, 0, :, :, :]),
+                        os.path.join(self.pred_dir, '{}.nii.gz'.format(trainer.cur_epoch)))
+        im_pred.save(os.path.join(self.pred_dir, "2d",
+                     '{}.png'.format(trainer.cur_epoch)))
+        model.train()
+
+def get_dataloader(config):
+    if config.DATASET == 'synth':
+        return get_synth_dhcp_dataloader(config)
+    else:
+        raise NotImplementedError
+
+
 
 class TensorBoardLogger():
     def __init__(self, log_dir, **kwargs):
@@ -227,3 +320,4 @@ def train():
 
 if __name__ == '__main__':
     train()
+
