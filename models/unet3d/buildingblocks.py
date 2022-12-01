@@ -64,8 +64,10 @@ def create_conv(in_channels, out_channels, kernel_size, order, num_groups, paddi
                 modules.append(('batchnorm', nn.BatchNorm3d(in_channels)))
             else:
                 modules.append(('batchnorm', nn.BatchNorm3d(out_channels)))
+        elif char == 'z':
+            modules.append(('VAE', VAEBlock(num_features=out_channels,latent_size=out_channels)))
         else:
-            raise ValueError(f"Unsupported layer type '{char}'. MUST be one of ['b', 'g', 'r', 'l', 'e', 'c']")
+            raise ValueError(f"Unsupported layer type '{char}'. MUST be one of ['b', 'g', 'r', 'l', 'e', 'c','z']")
 
     return modules
 
@@ -190,6 +192,75 @@ class ExtResNetBlock(nn.Module):
         return out
 
 
+class VAEBlock(nn.Module):
+    """
+    A linear block with Bayesian sampling.
+    """
+    '''
+    input shape:  torch.Size([1, 32, 6, 9, 9])
+    z shape:  torch.Size([1, 9, 6, 9, 32])
+    output shape:  torch.Size([1, 32, 6, 9, 9])
+    '''
+    def __init__(self, num_features, latent_size=16, **kwargs):
+        super(VAEBlock, self).__init__()
+        self.mu = nn.Linear(num_features, num_features)
+        self.logvar = nn.Linear(num_features, num_features)
+        self.alpha = kwargs.get('alpha', 0.00025)
+        self.last_mu = None
+        self.last_logvar = None
+        self.kl = None
+        self.enabled = False
+        # self.mse = None
+        # self.criterion = nn.MSELoss()
+        self.loss = None
+        self.latent_to_decode = nn.Linear(num_features, num_features)  
+    def sample_from_mu_var(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        sample = eps.mul(std).add_(mu)
+        # return mu
+        return sample  
+    def enable(self):
+        self.enabled = True
+        torch.nn.init.eye_(self.mu.weight)
+        torch.nn.init.zeros_(self.mu.bias)
+        torch.nn.init.eye_(self.latent_to_decode.weight)
+        torch.nn.init.zeros_(self.latent_to_decode.bias)
+        #print if weight are all zero
+        torch.nn.init.constant_(self.logvar.bias,-65535)
+        torch.nn.init.zeros_(self.logvar.weight)
+    def forward(self, x):
+        if not self.enabled:
+            return x
+        # sample from the latent space
+        # print('input shape: ', x.shape)
+        x = torch.transpose(x, 1, -1)
+        mu = self.mu(x)
+        logvar = self.logvar(x)  
+        z = self.sample_from_mu_var(mu, logvar)
+        # print(z.sub(x).abs().mean())
+        # print('z shape: ', z.shape)
+        # decode the latent space
+        z = self.latent_to_decode(z)
+        # print(z.sub(x).abs().mean())
+        # compute the KL divergence
+        kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        # compute the MSE
+        # mse = self.criterion(z, x)
+        # compute the loss
+        # self.loss = self.alpha*kl + mse
+        # save the last mu and logvar
+        self.last_mu = mu
+        self.last_logvar = logvar
+        # save the kl and mse
+        self.kl = kl
+        # self.mse = mse
+        # return the output
+        z = torch.transpose(z, 1, -1)
+        # print('output shape: ', z.shape)
+        return z
+
+
 class Encoder(nn.Module):
     """
     A single module from the encoder path consisting of the optional max
@@ -230,6 +301,16 @@ class Encoder(nn.Module):
                                          order=conv_layer_order,
                                          num_groups=num_groups,
                                          padding=padding)
+
+    def get_metrics(self):
+        #check if VAE layer is present
+        if hasattr(self.basic_module, 'VAE'):
+            module = self.basic_module.SingleConv1.VAE
+            kl = module.kl
+            # mse = module.mse
+            return kl
+        else:
+            return None
 
     def forward(self, x):
         if self.pooling is not None:
@@ -294,6 +375,15 @@ class Decoder(nn.Module):
         x = self.basic_module(x)
         return x
 
+    def get_metrics(self):
+        if hasattr(self.basic_module, 'VAE'):
+            module = self.basic_module.SingleConv1.VAE
+            kl = module.kl
+            # mse = module.mse
+            return kl
+        else:
+            return None
+        
     @staticmethod
     def _joining(encoder_features, x, concat):
         if concat:
