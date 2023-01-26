@@ -31,6 +31,9 @@ list_images_t2 = [x.replace('_desc-drawem9_dseg_1mm.nii.gz', '_T2w_brain_1mm.nii
 list_images_t1 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t1')) for x in list_images_t1]
 list_images_t2 = [x.replace(op.join(data_dir, 'labels'), op.join(data_dir, 'images_t2')) for x in list_images_t2]
 list_basenames = [op.basename(x).split('_')[0] for x in list_images_t1]
+landmarks_t1 = op.join(data_dir, 'landmarks_t1.npy')
+landmarks_t2 = op.join(data_dir, 'landmarks_t2.npy')
+landmarks_dict = {'image_t1':landmarks_t1,'image_t2':landmarks_t2}
 # list_dir = list_dir[:300]
 # list_basenames = list_basenames[:300]
 # list_images_t1 = list_images_t1[:300]
@@ -103,6 +106,19 @@ spacing = np.array(spacing)
 #     gt_t2 = sitk.GetArrayFromImage(gt_t2)
 #     image_t1 = (image_t1 - np.mean(image_t1)) / np.std(image_t1)
 #     image_t2 = (itio.
+
+def get_bbox(img, lb):
+    r = np.any(img, axis=(1, 2))
+    c = np.any(img, axis=(0, 2))
+    z = np.any(img, axis=(0, 1))
+
+    rmin, rmax = np.where(r>lb)[0][[0,-1]]
+    cmin, cmax = np.where(c>lb)[0][[0,-1]]
+    zmin, zmax = np.where(z>lb)[0][[0,-1]]
+
+    return rmin, rmax, cmin, cmax, zmin, zmax
+
+
 def _load(x):
     '''
     Load the data from the path to the memory (not VRAM)
@@ -116,25 +132,28 @@ def _load(x):
             image_t1 = tio.ScalarImage(img_t1),
             image_t2 = tio.ScalarImage(img_t2),
         )
-        shape_1 = subject.image_t1.data.shape
-        shape_2 = subject.image_t2.data.shape
-        min_shape = np.min([shape_1, shape_2], axis=0)
-        subject.image_t1.data = subject.image_t1.data[0:min_shape[0], 0:min_shape[1], 0:min_shape[2]]
         transform_1 = tio.Compose([
+            tio.transforms.HistogramStandardization(landmarks_dict),
+            tio.transforms.RescaleIntensity((0., 1.)),
+            tio.transforms.ToCanonical(),
             tio.transforms.Resample(spacing),
-            # tio.transforms.RandomBlur((1,1)),
-            tio.transforms.RescaleIntensity(0., 1.),
-            tio.transforms.RandomGamma((0.46,0.49)),
-            # tio.transforms.RandomMotion(degrees=5.,translation=2.,num_transforms=20),
+            tio.transforms.RandomBlur((1.5,1.5,1.5,1.5,2,2)),
             tio.transforms.Resample((1.,1.,1.)),
         ])
         transform_1_gt = tio.Compose([
-            tio.transforms.RescaleIntensity(0., 1.),
+            tio.transforms.HistogramStandardization(landmarks_dict),
+            tio.transforms.RescaleIntensity((0., 1.)),
             tio.transforms.ToCanonical(),
             tio.transforms.Resample((1.,1.,1.)),
         ])
         subject_gt = transform_1_gt(subject)
         subject = transform_1(subject)
+        shape = subject_gt.image_t2.data.numpy()[0].shape
+        lb = np.percentile(subject.image_t2.data.numpy(),1)
+        bbox = get_bbox(subject.image_t2.data.numpy()[0],lb)
+        transform_crop = tio.transforms.Crop((bbox[0], shape[0]-bbox[1], bbox[2], shape[1]-bbox[3], bbox[4], shape[2]-bbox[5]))
+        subject = transform_crop(subject)
+        subject_gt = transform_crop(subject_gt)
         edge_max = max(subject.image_t1.data.shape)
         padding = ((edge_max - subject.image_t1.data.shape[1]) // 2, 
                     (edge_max - subject.image_t1.data.shape[2]) // 2,
@@ -142,14 +161,9 @@ def _load(x):
         transform_2 = tio.Compose([
             tio.Pad(padding),
             tio.transforms.Resize((160,160,160)),
-            # tio.transforms.RandomNoise(0.5,(0,1)),
         ])
-        transform_2_gt = tio.Compose([
-            tio.Pad(padding),
-            tio.transforms.Resize((160,160,160)),
-        ])
-        subject_gt = transform_2_gt(subject_gt)
         subject = transform_2(subject)
+        subject_gt = transform_2(subject_gt)
         if not op.exists(preprocessed_path):
             os.makedirs(preprocessed_path)
         with h5.File(op.join(preprocessed_path, basename + '.h5'), 'w') as f:

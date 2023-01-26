@@ -22,3 +22,4 @@ geomloss
 scikit-optimize
 seaborn
 piqa
+torch_optimizer

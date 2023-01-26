@@ -1,17 +1,17 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR = "/media/hdd/HCP_1200"
-OUTPUT_DIR = "/media/hdd/viscent/SR-UNet/experiments/output_cai_hcp_t2_4000"
+DATA_DIR = "/media/hdd/dhcp/dhcp_hires"
+OUTPUT_DIR = "/media/hdd/viscent/SR-UNet/experiments/output_cai_hcp_t2_dbg"
 AUGMENTATION=False
 INPUT_MODALITIES=["t2"]
 OUTPUT_MODALITIES=["t2"]
-BATCH_SIZE=6
+BATCH_SIZE=3
 IN_CHANNELS=1
 OUT_CHANNELS=1
 NUM_EPOCHS=1000
 N_SPLITS=5
-F_MAPS=[16, 32, 64, 128, 256]
+F_MAPS=[32, 64, 128, 256, 320]
 
 WARMUP_EPOCHS=None
 LR=0.001
@@ -20,6 +20,7 @@ LATENT_SIZE = 128
 ALPHA = 0.00025
 DOWN_FACTOR = 5
 DATASET='HCP'
+OPTMIZER = 'lamb'
 
 NNODES=1
 NGPUS_PER_NODE=1

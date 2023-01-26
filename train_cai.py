@@ -12,6 +12,7 @@ from colossalai.logging import disable_existing_loggers, get_dist_logger
 from colossalai.trainer import Trainer, hooks
 from colossalai.utils.checkpointing import save_checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch_optimizer import Lamb
 
 
 from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader
@@ -35,6 +36,7 @@ class custom_MSE(torch.nn.MSELoss):
     def forward(self, input, target):
         input = input.squeeze(1)
         return super(custom_MSE, self).forward(input, target)
+
 
 class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
     def __init__(self, checkpoint_dir, output_dir, dataloader, fold, priority=10):
@@ -61,7 +63,6 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
     #     kl, mse = model.get_metrics()
     #     self.logger.info('Epoch: {} MSE: {} KL: {}'.format(trainer.cur_epoch, mse, kl))
 
-
     def after_train_epoch(self, trainer):
         model = trainer.engine.model
         if not os.path.exists(self.checkpoint_dir):
@@ -86,7 +87,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
             # graph = hl.build_graph(model, _image)
             # graph.theme = hl.graph.THEMES['blue'].copy()
             # graph.save(os.path.join(self.output_dir, 'graph.png'),format='png')
-            make_dot(_pred,params=dict(model.named_parameters())).render(os.path.join(self.output_dir, 'graph_1.png'))
+            make_dot(_pred, params=dict(model.named_parameters())).render(os.path.join(self.output_dir, 'graph_1.png'))
             if gpc.config.IN_CHANNELS == 2:
                 sitk.WriteImage(sitk.GetImageFromArray(image[0, 0, :, :, :]),
                                 os.path.join(self.output_dir, 'image_t1.nii.gz'))
@@ -113,6 +114,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
                      '{}.png'.format(trainer.cur_epoch)))
         model.train()
 
+
 def get_dataloader(config):
     if config.DATASET == 'synth':
         return get_synth_dhcp_dataloader(config)
@@ -120,36 +122,41 @@ def get_dataloader(config):
         raise NotImplementedError
 
 
-
 class TensorBoardLogger():
     def __init__(self, log_dir, **kwargs):
         self.log_dir = log_dir
         self.writer = SummaryWriter(log_dir, **kwargs)
-        
-    
+
     def __call__(self, phase, step, **kwargs):
         for key, value in kwargs.items():
             self.writer.add_scalar(f'{key}/{phase}', value, step)
 
+
 class BetaScheduler():
-    def __init__(self, model, min=0,max=0.0001, cycle_len=1000):
+    def __init__(self, model, min=0, max=0.0001, cycle_len=1000):
         self.model = model
         self.min = min
         self.max = max
         self.current_step = 0
         self.cycle_len = cycle_len
+
     def get_beta(self):
         return self.model.alpha
+
     def step(self):
-        self.model.alpha = self.min + (self.max - self.min) * (1 - np.cos(self.current_step / self.cycle_len * np.pi)) / 2
-        self.current_step += 1 
+        self.model.alpha = self.min + (self.max - self.min) * \
+            (1 - np.cos(self.current_step / self.cycle_len * np.pi)) / 2
+        self.current_step += 1
+
 
 class TrainLoggerHook(colossalai.trainer.hooks.BaseHook):
     def __init__(self, priority: int, TBLogger):
         super().__init__(priority)
         self.TBLogger = TBLogger
+
     def after_train_iter(self, trainer, output, label, loss):
-        self.TBLogger(phase='train', step=trainer.cur_step,loss=loss)
+        self.TBLogger(phase='train', step=trainer.cur_step, loss=loss)
+
 
 class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
     def after_test_epoch(self, trainer):
@@ -163,7 +170,8 @@ class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
             os.makedirs(pred_dir)
         ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
         if cur_epoch % 10 == 0:
-            save_checkpoint(op.join(checkpoint_dir,'{}.pth'.format(cur_epoch)), cur_epoch, self.model, trainer.engine.optimizer,self._lr_scheduler)
+            save_checkpoint(op.join(checkpoint_dir, '{}.pth'.format(cur_epoch)), cur_epoch,
+                            self.model, trainer.engine.optimizer, self._lr_scheduler)
         image = np.load(os.path.join(output_dir, 'val_image.npy'))
         target = np.load(os.path.join(output_dir, 'val_target.npy'))
         image = torch.tensor(image).unsqueeze(0).cuda()
@@ -203,10 +211,11 @@ class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
             os.makedirs(os.path.join(pred_dir, '2d'))
         if cur_epoch % 10 == 0:
             im_pred.save(os.path.join(pred_dir, "2d",
-                        '{}.png'.format(cur_epoch)))
+                                      '{}.png'.format(cur_epoch)))
+
 
 def train():
-    # Debug: find anormaly 
+    # Debug: find anormaly
     torch.autograd.set_detect_anomaly(True)
     # Initialize Colossal-AI context
     parser = colossalai.get_default_parser()
@@ -221,10 +230,10 @@ def train():
     # Find a free port
     while not success:
         try:
-            colossalai.launch(args.config,0,1,'localhost',port)
+            colossalai.launch(args.config, 0, 1, 'localhost', port)
             success = True
         except:
-            port+=1
+            port += 1
     # Initialize the logger
     logger = get_dist_logger()
     # Create paths
@@ -247,74 +256,79 @@ def train():
                                                             down_factor=gpc.config.DOWN_FACTOR,)
     elif gpc.config.DATASET == 'HCP':
         dataloaders, val_loader = get_synth_hcp_dataloader(data_dir=gpc.config.DATA_DIR,
-                                                            batch_size=gpc.config.BATCH_SIZE,
-                                                            num_samples=gpc.config.NUM_SAMPLES,
-                                                            input_modalities=gpc.config.INPUT_MODALITIES,
-                                                            output_modalities=gpc.config.OUTPUT_MODALITIES,
-                                                            output_dir=output_dir,
-                                                            n_splits=n_splits,
-                                                            augmentation=gpc.config.AUGMENTATION,
-                                                            down_factor=gpc.config.DOWN_FACTOR,)
+                                                           batch_size=gpc.config.BATCH_SIZE,
+                                                           num_samples=gpc.config.NUM_SAMPLES,
+                                                           input_modalities=gpc.config.INPUT_MODALITIES,
+                                                           output_modalities=gpc.config.OUTPUT_MODALITIES,
+                                                           output_dir=output_dir,
+                                                           n_splits=n_splits,
+                                                           augmentation=gpc.config.AUGMENTATION,
+                                                           down_factor=gpc.config.DOWN_FACTOR,)
     elif gpc.config.DATASET == 'BraTS':
         dataloaders, val_loader = get_synth_brats_dataloader(data_dir=gpc.config.DATA_DIR,
-                                                            batch_size=gpc.config.BATCH_SIZE,
-                                                            num_samples=gpc.config.NUM_SAMPLES,
-                                                            input_modalities=gpc.config.INPUT_MODALITIES,
-                                                            output_modalities=gpc.config.OUTPUT_MODALITIES,
-                                                            output_dir=output_dir,
-                                                            n_splits=n_splits,
-                                                            augmentation=gpc.config.AUGMENTATION,
-                                                            down_factor=gpc.config.DOWN_FACTOR,)
-    
+                                                             batch_size=gpc.config.BATCH_SIZE,
+                                                             num_samples=gpc.config.NUM_SAMPLES,
+                                                             input_modalities=gpc.config.INPUT_MODALITIES,
+                                                             output_modalities=gpc.config.OUTPUT_MODALITIES,
+                                                             output_dir=output_dir,
+                                                             n_splits=n_splits,
+                                                             augmentation=gpc.config.AUGMENTATION,
+                                                             down_factor=gpc.config.DOWN_FACTOR,)
+
     train_loader, test_loader = dataloaders[0]
     # Define model, optimizer and loss
     model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
-                    out_channels=gpc.config.OUT_CHANNELS,
-                    f_maps=gpc.config.F_MAPS,
-                    layer_order='gcr',
-                    num_groups=min(1, gpc.config.F_MAPS[0]//2),
-                    is_segmentation=False,
-                    )
+                   out_channels=gpc.config.OUT_CHANNELS,
+                   f_maps=gpc.config.F_MAPS,
+                   layer_order='gcr',
+                   num_groups=min(1, gpc.config.F_MAPS[0]//2),
+                   is_segmentation=False,
+                   )
     criterion = nn.MSELoss()
     logger.info('Using MSE loss')
-    optim = torch.optim.Adam(
-        model.parameters(),
-        lr=gpc.config.LR,
-        betas=(0.9, 0.999)
-    )
+    if getattr(gpc.config, 'OPTIMIZER', 'adam') == 'adam':
+        optim = torch.optim.Adam(
+            model.parameters(),
+            lr=gpc.config.LR,
+            betas=(0.9, 0.999)
+        )
+    elif getattr(gpc.config, 'OPTIMIZER', 'adam') == 'lamb':
+        optim = Lamb(
+            model.parameters(),
+            lr=gpc.config.LR,
+        )
     lr_scheduler = CosineAnnealingLR(optim, 1000)
     # Initialize the trainer
     engine, train_dataloader, test_dataloader, lr_scheduler = colossalai.initialize(
         model,
-        optim, 
-        criterion, 
-        train_loader, 
-        test_loader, 
+        optim,
+        criterion,
+        train_loader,
+        test_loader,
         lr_scheduler
     )
     trainer = Trainer(engine, logger=logger)
     # Initialize the TB Logger
-    TBLogger = TensorBoardLogger(log_dir = op.join(output_dir, 'tb_logs'))
+    TBLogger = TensorBoardLogger(log_dir=op.join(output_dir, 'tb_logs'))
     TBHook = TrainLoggerHook(100, TBLogger)
     # Saving validation images
-    val_image,val_target = val_loader.dataset.__getitem__(0)
+    val_image, val_target = val_loader.dataset.__getitem__(0)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    if not os.path.exists(os.path.join(output_dir, 'checkpoints')):
+        os.makedirs(os.path.join(output_dir, 'checkpoints'))
     np.save(os.path.join(output_dir, 'val_image.npy'), val_image)
     np.save(os.path.join(output_dir, 'val_target.npy'), val_target)
 
-    
-    trainer.fit(train_dataloader, 
-    gpc.config.NUM_EPOCHS, 
-    None, 
-    test_dataloader,
-    1,
-    [TBHook, 
-    EvalHook(101, op.join(output_dir,'checkpoints','best_model.pth'))],
-    True)
+    trainer.fit(train_dataloader,
+                gpc.config.NUM_EPOCHS,
+                None,
+                test_dataloader,
+                1,
+                [TBHook,
+                 EvalHook(101, op.join(output_dir, 'checkpoints', 'best_model.pth'))],
+                True)
 
-            
 
 if __name__ == '__main__':
     train()
-

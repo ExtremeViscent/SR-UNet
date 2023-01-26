@@ -21,7 +21,12 @@ import torchio as tio
 from tqdm.notebook import tqdm
 from skimage.transform import resize, rescale
 from scipy.ndimage import zoom
-
+from geomloss import SamplesLoss
+from skopt import gp_minimize
+import torchvision
+import kornia as K
+import os.path as op
+import glob
 # Callback invoked by the IPython interact method for scrolling and modifying the alpha blending
 # of an image stack of two images that occupy the same physical space.
 def display_image(image_z, image):
@@ -750,3 +755,18 @@ def kl_forward_latent(self, x):
         for encoder in self.encoders:
             x = encoder(x)
         return x
+def auto_inference(models, x, latents, divergences_innate, return_details = False):
+    divergences = np.zeros(len(models))
+    divergences_per = np.zeros(len(models))
+    for i, model in enumerate(models):
+        latent = kl_forward_latent(model,x).cuda()
+        latent_ = latents[i].cuda()
+        latent = latent.flatten().unsqueeze(0)
+        latent_ = latent_.flatten(start_dim=1)
+        divergences[i] = SamplesLoss("sinkhorn")(latent, latent_)
+    divergences_per = divergences/divergences_innate
+    output = models[np.argmin(divergences_per)](x)
+    if return_details:
+        return output, divergences_per, np.argmin(divergences_per)
+    else:
+        return output
