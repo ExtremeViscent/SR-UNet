@@ -78,7 +78,7 @@ class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
         target = np.load(os.path.join(output_dir, 'val_target.npy'))
         image = torch.tensor(image).unsqueeze(0).cuda()
         target = torch.tensor(target).unsqueeze(0).cuda()
-        pred = trainer.predict(image)
+        pred = trainer.engine.model(image)
         image = image.cpu().detach().numpy().astype(np.float32)
         target = target.cpu().detach().numpy().astype(np.float32)
         pred = pred.cpu().detach().numpy().astype(np.float32)
