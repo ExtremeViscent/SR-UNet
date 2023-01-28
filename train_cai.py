@@ -74,7 +74,7 @@ class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
         target = torch.tensor(target).unsqueeze(0).cuda()
         _image = image
         model.eval()
-        pred = trainer.engine(image)
+        pred = trainer.engine.model(image)
         _pred = pred
         image = image.cpu().detach().numpy().astype(np.float32)
         target = target.cpu().detach().numpy().astype(np.float32)
@@ -176,7 +176,7 @@ class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
         target = np.load(os.path.join(output_dir, 'val_target.npy'))
         image = torch.tensor(image).unsqueeze(0).cuda()
         target = torch.tensor(target).unsqueeze(0).cuda()
-        pred = trainer.predict(image)
+        pred = trainer.engine.model(image)
         image = image.cpu().detach().numpy().astype(np.float32)
         target = target.cpu().detach().numpy().astype(np.float32)
         pred = pred.cpu().detach().numpy().astype(np.float32)
