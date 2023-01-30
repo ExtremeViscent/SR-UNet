@@ -83,7 +83,7 @@ def load_model(model_path:str):
 
 def get_dataloader(dataset='dhcp', num_samples=None, modality='t1',augmentation=False):
     if dataset == 'dhcp':
-        data_dir = '/media/hdd/dhcp/dhcp_lores/'
+        data_dir = '/media/hdd/dhcp/dhcp_hires/'
         loaders, val_loader = get_synth_dhcp_dataloader(data_dir=data_dir,
                                                                 batch_size=1,
                                                                 num_samples=num_samples,
@@ -109,7 +109,7 @@ def get_dataloader(dataset='dhcp', num_samples=None, modality='t1',augmentation=
         train_loader, test_loader = loaders[0]
         return train_loader, test_loader, val_loader
     elif dataset == 'brats':
-        data_dir = '/media/hdd/BraTS2020/'
+        data_dir = '/media/hdd/BraTS2021/Training'
         loaders, val_loader = get_synth_brats_dataloader(data_dir=data_dir,
                                                                 batch_size=1,
                                                                 num_samples=num_samples,

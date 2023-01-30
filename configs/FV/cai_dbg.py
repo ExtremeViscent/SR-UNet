@@ -6,7 +6,7 @@ OUTPUT_DIR = "/media/hdd/viscent/SR-UNet/experiments/output_cai_hcp_t2_dbg"
 AUGMENTATION=False
 INPUT_MODALITIES=["t2"]
 OUTPUT_MODALITIES=["t2"]
-BATCH_SIZE=3
+BATCH_SIZE=1
 IN_CHANNELS=1
 OUT_CHANNELS=1
 NUM_EPOCHS=1000
@@ -31,5 +31,5 @@ fp16=dict(
 )
 
 parallel = dict(
-    data=dict(size=WORLD_SIZE),
+    data=dict(size=2),
 )

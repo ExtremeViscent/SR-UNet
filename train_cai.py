@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import colossalai
 import colossalai.utils as utils
 from colossalai.context.parallel_mode import ParallelMode
-from colossalai.context.parallel_context import get_global_rank
 from colossalai.core import global_context as gpc
 from colossalai.engine.schedule import (InterleavedPipelineSchedule,
                                         PipelineSchedule)
@@ -171,7 +170,7 @@ class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
         if not os.path.exists(pred_dir):
             os.makedirs(pred_dir)
         ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
-        if cur_epoch % 10 == 0 and get_global_rank() == 0:
+        if cur_epoch % 10 == 0 and gpc.get_global_rank() == 0:
             save_checkpoint(op.join(checkpoint_dir, '{}.pth'.format(cur_epoch)), cur_epoch,
                             self.model, trainer.engine.optimizer, self._lr_scheduler)
             dist.barrier()
