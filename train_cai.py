@@ -5,14 +5,16 @@ import torch.nn.functional as F
 import colossalai
 import colossalai.utils as utils
 from colossalai.context.parallel_mode import ParallelMode
+from colossalai.context.parallel_context import get_global_rank
 from colossalai.core import global_context as gpc
 from colossalai.engine.schedule import (InterleavedPipelineSchedule,
                                         PipelineSchedule)
 from colossalai.logging import disable_existing_loggers, get_dist_logger
 from colossalai.trainer import Trainer, hooks
 from colossalai.utils.checkpointing import save_checkpoint
+from colossalai.nn.optimizer import FusedLAMB
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch_optimizer import Lamb
+import torch.distributed as dist
 
 
 from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader
@@ -169,9 +171,10 @@ class EvalHook(colossalai.trainer.hooks.SaveCheckpointHook):
         if not os.path.exists(pred_dir):
             os.makedirs(pred_dir)
         ckpt_path = os.path.join(checkpoint_dir, '{}.pth'.format(cur_epoch))
-        if cur_epoch % 10 == 0:
+        if cur_epoch % 10 == 0 and get_global_rank() == 0:
             save_checkpoint(op.join(checkpoint_dir, '{}.pth'.format(cur_epoch)), cur_epoch,
                             self.model, trainer.engine.optimizer, self._lr_scheduler)
+            dist.barrier()
         image = np.load(os.path.join(output_dir, 'val_image.npy'))
         target = np.load(os.path.join(output_dir, 'val_target.npy'))
         image = torch.tensor(image).unsqueeze(0).cuda()
@@ -293,7 +296,7 @@ def train():
             betas=(0.9, 0.999)
         )
     elif getattr(gpc.config, 'OPTIMIZER', 'adam') == 'lamb':
-        optim = Lamb(
+        optim = FusedLAMB(
             model.parameters(),
             lr=gpc.config.LR,
         )
@@ -326,7 +329,7 @@ def train():
                 test_dataloader,
                 1,
                 [TBHook,
-                 EvalHook(101, op.join(output_dir, 'checkpoints', 'best_model.pth'))],
+                 EvalHook(interval = 10, checkpoint_dir = op.join(output_dir, 'checkpoints', 'best_model.pth'), model = model)],
                 True)
 
 
