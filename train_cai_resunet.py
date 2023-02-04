@@ -17,7 +17,7 @@ import torch.distributed as dist
 
 
 from dataloaders import get_synth_dhcp_dataloader, get_synth_hcp_dataloader, get_synth_brats_dataloader
-from models.unet3d.model import BUNet3D, UNet3D, ResidualUNet3D
+from models.unet3d.model import BUNet3D, UNet3D
 import importlib
 import SimpleITK as sitk
 from PIL import Image
@@ -279,26 +279,13 @@ def train():
 
     train_loader, test_loader = dataloaders[0]
     # Define model, optimizer and loss
-    apply_pooling = getattr(gpc.config, 'APPLY_POOLING', True)
-    if getattr(gpc.config, 'MODEL', 'unet') == 'resunet3d':
-        model = ResidualUNet3D(in_channels=gpc.config.IN_CHANNELS,
-                        out_channels=gpc.config.OUT_CHANNELS,
-                        f_maps=gpc.config.F_MAPS,
-                        layer_order='gcr',
-                        num_groups=min(1, gpc.config.F_MAPS[0]//2),
-                        is_segmentation=False,
-                        apply_pooling=apply_pooling
-                        )
-        logger.info('Using ResUNet3D')
-    else:
-        model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
-                    out_channels=gpc.config.OUT_CHANNELS,
-                    f_maps=gpc.config.F_MAPS,
-                    layer_order='gcr',
-                    num_groups=min(1, gpc.config.F_MAPS[0]//2),
-                    is_segmentation=False,
-                    apply_pooling=apply_pooling
-                    )
+    model = UNet3D(in_channels=gpc.config.IN_CHANNELS,
+                   out_channels=gpc.config.OUT_CHANNELS,
+                   f_maps=gpc.config.F_MAPS,
+                   layer_order='gcr',
+                   num_groups=min(1, gpc.config.F_MAPS[0]//2),
+                   is_segmentation=False,
+                   )
     criterion = nn.MSELoss()
     logger.info('Using MSE loss')
     if getattr(gpc.config, 'OPTIMIZER', 'adam') == 'adam':

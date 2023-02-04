@@ -1,7 +1,7 @@
 from colossalai.amp import AMP_TYPE
 import os
 
-DATA_DIR = "/media/hdd/dhcp/dhcp_hires"
+DATA_DIR = "/media/hdd/HCP_1200"
 OUTPUT_DIR = "/media/hdd/viscent/SR-UNet/experiments/output_cai_hcp_t2_dbg"
 AUGMENTATION=False
 INPUT_MODALITIES=["t2"]
@@ -11,8 +11,10 @@ IN_CHANNELS=1
 OUT_CHANNELS=1
 NUM_EPOCHS=1000
 N_SPLITS=5
-F_MAPS=[32, 64, 128, 256, 320]
+F_MAPS=[128,128,128,128,128]
 
+MODEL='unet3d'
+apply_pooling=False
 WARMUP_EPOCHS=None
 LR=0.001
 NUM_SAMPLES=100
@@ -31,5 +33,5 @@ fp16=dict(
 )
 
 parallel = dict(
-    data=dict(size=2),
+    data=dict(size=1),
 )

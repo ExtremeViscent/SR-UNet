@@ -65,7 +65,7 @@ def create_conv(in_channels, out_channels, kernel_size, order, num_groups, paddi
             else:
                 modules.append(('batchnorm', nn.BatchNorm3d(out_channels)))
         elif char == 'z':
-            modules.append(('VAE', VAEBlock(num_features=out_channels,latent_size=out_channels)))
+            modules.append(('VAE', VAEBlock(num_features=out_channels, latent_size=out_channels)))
         else:
             raise ValueError(f"Unsupported layer type '{char}'. MUST be one of ['b', 'g', 'r', 'l', 'e', 'c','z']")
 
@@ -201,6 +201,7 @@ class VAEBlock(nn.Module):
     z shape:  torch.Size([1, 9, 6, 9, 32])
     output shape:  torch.Size([1, 32, 6, 9, 9])
     '''
+
     def __init__(self, num_features, latent_size=16, **kwargs):
         super(VAEBlock, self).__init__()
         self.mu = nn.Linear(num_features, num_features)
@@ -213,22 +214,25 @@ class VAEBlock(nn.Module):
         # self.mse = None
         # self.criterion = nn.MSELoss()
         self.loss = None
-        self.latent_to_decode = nn.Linear(num_features, num_features)  
+        self.latent_to_decode = nn.Linear(num_features, num_features)
+
     def sample_from_mu_var(self, mu, logvar):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         sample = eps.mul(std).add_(mu)
         # return mu
-        return sample  
+        return sample
+
     def enable(self):
         self.enabled = True
         torch.nn.init.eye_(self.mu.weight)
         torch.nn.init.zeros_(self.mu.bias)
         torch.nn.init.eye_(self.latent_to_decode.weight)
         torch.nn.init.zeros_(self.latent_to_decode.bias)
-        #print if weight are all zero
-        torch.nn.init.constant_(self.logvar.bias,-65535)
+        # print if weight are all zero
+        torch.nn.init.constant_(self.logvar.bias, -65535)
         torch.nn.init.zeros_(self.logvar.weight)
+
     def forward(self, x):
         if not self.enabled:
             return x
@@ -236,7 +240,7 @@ class VAEBlock(nn.Module):
         # print('input shape: ', x.shape)
         x = torch.transpose(x, 1, -1)
         mu = self.mu(x)
-        logvar = self.logvar(x)  
+        logvar = self.logvar(x)
         z = self.sample_from_mu_var(mu, logvar)
         # print(z.sub(x).abs().mean())
         # print('z shape: ', z.shape)
@@ -303,7 +307,7 @@ class Encoder(nn.Module):
                                          padding=padding)
 
     def get_metrics(self):
-        #check if VAE layer is present
+        # check if VAE layer is present
         if hasattr(self.basic_module, 'VAE'):
             module = self.basic_module.SingleConv1.VAE
             kl = module.kl
@@ -383,7 +387,7 @@ class Decoder(nn.Module):
             return kl
         else:
             return None
-        
+
     @staticmethod
     def _joining(encoder_features, x, concat):
         if concat:
@@ -393,7 +397,7 @@ class Decoder(nn.Module):
 
 
 def create_encoders(in_channels, f_maps, basic_module, conv_kernel_size, conv_padding, layer_order, num_groups,
-                    pool_kernel_size):
+                    pool_kernel_size, apply_pooling=True):
     # create encoder path consisting of Encoder modules. Depth of the encoder is equal to `len(f_maps)`
     encoders = []
     for i, out_feature_num in enumerate(f_maps):
@@ -408,6 +412,7 @@ def create_encoders(in_channels, f_maps, basic_module, conv_kernel_size, conv_pa
         else:
             # TODO: adapt for anisotropy in the data, i.e. use proper pooling kernel to make the data isotropic after 1-2 pooling operations
             encoder = Encoder(f_maps[i - 1], out_feature_num,
+                              apply_pooling=apply_pooling,
                               basic_module=basic_module,
                               conv_layer_order=layer_order,
                               conv_kernel_size=conv_kernel_size,

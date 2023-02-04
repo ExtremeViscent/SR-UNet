@@ -17,6 +17,7 @@ from .utils import number_of_features_per_level, get_class
 
 import kornia.augmentation as K
 
+
 class Abstract3DUNet(nn.Module):
     """
     Base class for standard and residual UNet.
@@ -49,7 +50,7 @@ class Abstract3DUNet(nn.Module):
 
     def __init__(self, in_channels, out_channels, final_sigmoid, basic_module, f_maps=64, layer_order='gcr',
                  num_groups=8, num_levels=4, is_segmentation=True, conv_kernel_size=3, pool_kernel_size=2,
-                 conv_padding=1, **kwargs):
+                 conv_padding=1, apply_pooling=True, **kwargs):
         super(Abstract3DUNet, self).__init__()
 
         if isinstance(f_maps, int):
@@ -61,11 +62,11 @@ class Abstract3DUNet(nn.Module):
 
         # create encoder path
         self.encoders = create_encoders(in_channels, f_maps, basic_module, conv_kernel_size, conv_padding, layer_order,
-                                        num_groups, pool_kernel_size)
+                                        num_groups, pool_kernel_size, apply_pooling=apply_pooling)
 
         # create decoder path
         self.decoders = create_decoders(f_maps, basic_module, conv_kernel_size, conv_padding, layer_order, num_groups,
-                                        upsample=True)
+                                        upsample=apply_pooling)
 
         # in the last layer a 1×1 convolution reduces the number of output
         # channels to the number of labels
@@ -140,9 +141,9 @@ class Abstract3DBUNet(Abstract3DUNet):
         )
         # Junk for now
         self.transform = nn.Sequential(
-            K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True),
-            K.RandomMotionBlur3D(3, 35., 0.5, p=0.4,keepdim=True),
-            K.RandomAffine3D((15., 20., 20.), p=0.4,keepdim=True),
+            K.RandomRotation3D((15., 20., 20.), p=0.5, keepdim=True),
+            K.RandomMotionBlur3D(3, 35., 0.5, p=0.4, keepdim=True),
+            K.RandomAffine3D((15., 20., 20.), p=0.4, keepdim=True),
         )
         self.init_weights()
 
@@ -164,7 +165,6 @@ class Abstract3DBUNet(Abstract3DUNet):
         mu = self.mu(x)
         logvar = self.logvar(x)
 
-        
         # self.kl = None
         # self.mse = None
 
@@ -208,7 +208,7 @@ class Abstract3DBUNet(Abstract3DUNet):
         nn.init.normal_(self.logvar[0].weight.data, 0, 0.1)
         nn.init.zeros_(self.logvar[0].bias.data)
 
-    def patch_mse(self, im,im_hat, kernel_size=8, stride=4):
+    def patch_mse(self, im, im_hat, kernel_size=8, stride=4):
         se = (im - im_hat)**2
         se = se.unfold(2, kernel_size, stride).unfold(3, kernel_size, stride).unfold(4, kernel_size, stride)
         max_ = se.max(-1).values.max(-1).values.max(-1).values
@@ -217,7 +217,6 @@ class Abstract3DBUNet(Abstract3DUNet):
         mse = (mse - min_)/(max_ - min_ + 1e-8)
         mse = torch.mean(mse)
         return mse
-
 
     def VAE_loss(self, im, im_hat):
         recon_loss = 0.
@@ -234,14 +233,14 @@ class Abstract3DBUNet(Abstract3DUNet):
             recon_loss = 1 - structural_similarity_index_measure(im, im_hat)
         elif self.recon_loss_func == 'patch_mse':
             recon_loss = self.patch_mse(im, im_hat)
-        self.recon_loss = nn.Parameter(recon_loss,requires_grad=False)
+        self.recon_loss = nn.Parameter(recon_loss, requires_grad=False)
 
         if self.div_loss_func == 'kl':
-            div_loss = torch.sum(0.5 * (torch.exp(logvar) + torch.pow(mu,2) - 1 - logvar))
-            self.div_loss = nn.Parameter(div_loss,requires_grad=False)
+            div_loss = torch.sum(0.5 * (torch.exp(logvar) + torch.pow(mu, 2) - 1 - logvar))
+            self.div_loss = nn.Parameter(div_loss, requires_grad=False)
         elif self.div_loss_func == 'sinkhorn':
             div_loss = SamplesLoss("sinkhorn")(self.latent.flatten(1), torch.zeros_like(self.latent.flatten(1)))
-            self.div_loss = nn.Parameter(div_loss,requires_grad=False)
+            self.div_loss = nn.Parameter(div_loss, requires_grad=False)
         return recon_loss + self.alpha * div_loss
 
 
@@ -277,7 +276,7 @@ class UNet3D(Abstract3DUNet):
             vae_block = encoder.basic_module.SingleConv1.VAE
             vae_block.enable()
             vae_block = encoder.basic_module.SingleConv2.VAE
-            vae_block.enable()      
+            vae_block.enable()
         for decoder in self.decoders:
             vae_block = decoder.basic_module.SingleConv1.VAE
             vae_block.enable()
@@ -299,11 +298,11 @@ class UNet3D(Abstract3DUNet):
             return mse
         for encoder in self.encoders:
             _kl = encoder.get_metrics()
-            kl+=_kl
+            kl += _kl
         kl = kl/len(self.encoders)
         for decoder in self.decoders:
             _kl = decoder.get_metrics()
-            kl+=_kl
+            kl += _kl
         kl = kl/len(self.decoders)
         self.kl = kl
         self.mse = mse
@@ -335,7 +334,7 @@ class ResidualUNet3D(Abstract3DUNet):
     """
 
     def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
-                 num_groups=8, num_levels=5, is_segmentation=True, conv_padding=1, **kwargs):
+                 num_groups=8, num_levels=5, is_segmentation=True, conv_padding=1, apply_pooling=True, **kwargs):
         super(ResidualUNet3D, self).__init__(in_channels=in_channels,
                                              out_channels=out_channels,
                                              final_sigmoid=final_sigmoid,
@@ -346,6 +345,7 @@ class ResidualUNet3D(Abstract3DUNet):
                                              num_levels=num_levels,
                                              is_segmentation=is_segmentation,
                                              conv_padding=conv_padding,
+                                             apply_pooling=apply_pooling,
                                              **kwargs)
 
 
