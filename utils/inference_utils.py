@@ -76,9 +76,24 @@ def display_images(image_z, image_0, image_1, save_fig=False, save_path=None):
     ax2.axis("off")
     
 
-def load_model(model_path:str):
-    model = torch.load(model_path)
-    model.train()
+def load_model(path):
+    ckpt = torch.load(path)
+    if isinstance(ckpt, dict) and 'model' in ckpt:
+        model = UNet3D(in_channels=1,
+                        out_channels=1,
+                        f_maps=[32, 64, 128, 256, 320],
+                        layer_order='gcr',
+                        num_groups=min(1, 8),
+                        is_segmentation=False,
+                        )
+        state_dict_ = torch.load(path)['model']
+        state_dict = dict()
+        for k,v in state_dict_.items():
+            k = k.replace('model.','')
+            state_dict[k] = v
+        model.load_state_dict(state_dict)
+    else:
+        model = ckpt
     return model
 
 def get_dataloader(dataset='dhcp', num_samples=None, modality='t1',augmentation=False):
@@ -770,3 +785,14 @@ def auto_inference(models, x, latents, divergences_innate, return_details = Fals
         return output, divergences_per, np.argmin(divergences_per)
     else:
         return output
+
+def get_bbox(img, lb):
+    r = np.any(img, axis=(1, 2))
+    c = np.any(img, axis=(0, 2))
+    z = np.any(img, axis=(0, 1))
+
+    rmin, rmax = np.where(r>lb)[0][[0,-1]]
+    cmin, cmax = np.where(c>lb)[0][[0,-1]]
+    zmin, zmax = np.where(z>lb)[0][[0,-1]]
+
+    return rmin, rmax, cmin, cmax, zmin, zmax
