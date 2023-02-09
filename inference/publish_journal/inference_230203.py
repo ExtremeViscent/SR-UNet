@@ -5,8 +5,8 @@
 # ## Initialization
 
 # %%
-%load_ext autoreload
-%autoreload 2
+#%load_ext autoreload
+#%autoreload 2
 import sys
 sys.path.append("/media/hdd/viscent/SR-UNet")
 from utils.inference_utils import *
