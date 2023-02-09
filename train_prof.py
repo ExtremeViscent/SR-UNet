@@ -41,7 +41,14 @@ class custom_MSE(torch.nn.MSELoss):
         input = input.squeeze(1)
         return super(custom_MSE, self).forward(input, target)
 
-
+class ProfilerHook(colossalai.trainer.hooks.BaseHook):
+    def __init__(self, priority=10):
+        super(ProfilerHook, self).__init__(priority=priority)
+    def before_train_iter(self, trainer):
+        if trainer.cur_step == 0:
+            profiler.start()
+        if trainer.cur_step == 5:
+            profiler.stop()
 class SaveAndEvalByEpochHook(colossalai.trainer.hooks.BaseHook):
     def __init__(self, checkpoint_dir, output_dir, dataloader, fold, priority=10):
         super(SaveAndEvalByEpochHook, self).__init__(priority=priority)
@@ -330,7 +337,8 @@ def train():
                     test_dataloader,
                     1,
                     [TBHook,
-                    EvalHook(101, op.join(output_dir, 'checkpoints', 'best_model.pth'))],
+                    EvalHook(101, op.join(output_dir, 'checkpoints', 'best_model.pth')),
+                    ProfilerHook()],
                     True)
 
 
