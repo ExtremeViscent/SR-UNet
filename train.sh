@@ -2,6 +2,6 @@
 
 source ~/.bashrc
 conda deactivate
-conda activate bunet
+conda activate bunet    # activate the environments
 
-torchrun train_vae.py --config=/media/hdd/viscent/SR-UNet/configs/config_vae_all_t2.py
+torchrun train.py --config=configs/CREATE/unet/config_unet_brats_t2_5000.py

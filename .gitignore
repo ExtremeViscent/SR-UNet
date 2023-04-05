@@ -19,7 +19,6 @@ results/
 experiments/
 *.out
 *.nii
-*.png
 *.nii.gz
 prepare_env_*
 inference/*.pdf
