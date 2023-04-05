@@ -27,6 +27,7 @@ import torchvision
 import kornia as K
 import os.path as op
 import glob
+import scikit_posthocs as sp
 # Callback invoked by the IPython interact method for scrolling and modifying the alpha blending
 # of an image stack of two images that occupy the same physical space.
 def display_image(image_z, image):
@@ -770,21 +771,55 @@ def kl_forward_latent(self, x):
         for encoder in self.encoders:
             x = encoder(x)
         return x
-def auto_inference(models, x, latents, divergences_innate, return_details = False):
+
+def forward_with_latent(self, x):
+    # encoder part
+    encoders_features = []
+    for encoder in self.encoders:
+        x = encoder(x)
+        # reverse the encoder outputs to be aligned with the decoder
+        encoders_features.insert(0, x)
+    latent = x.clone()
+    # remove the last encoder's output from the list
+    # !!remember: it's the 1st in the list
+    encoders_features = encoders_features[1:]
+
+    # decoder part
+    for decoder, encoder_features in zip(self.decoders, encoders_features):
+        # pass the output from the corresponding encoder and the output
+        # of the previous decoder
+        x = decoder(encoder_features, x)
+
+    x = self.final_conv(x)
+
+    # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs logits
+    if not self.training and self.final_activation is not None:
+        x = self.final_activation(x)
+
+    return x, latent
+
+def auto_inference(models, im, gt, latents, divergences_innate, return_details = False, return_output = False):
     divergences = np.zeros(len(models))
     divergences_per = np.zeros(len(models))
+    loss = np.zeros(len(models))
+    outputs = []
     for i, model in enumerate(models):
-        latent = kl_forward_latent(model,x).cuda()
-        latent_ = latents[i].cuda()
-        latent = latent.flatten().unsqueeze(0)
-        latent_ = latent_.flatten(start_dim=1)
-        divergences[i] = SamplesLoss("sinkhorn")(latent, latent_)
-    divergences_per = divergences/divergences_innate
-    output = models[np.argmin(divergences_per)](x)
+        with torch.no_grad():
+            output, latent = forward_with_latent(model,im)
+            loss[i] = torch.functional.F.mse_loss(output, gt)
+            latent_ = latents[i].cuda()
+            latent = latent.flatten().unsqueeze(0)
+            latent_ = latent_.flatten(start_dim=1)
+            divergences[i] = SamplesLoss("sinkhorn")(latent, latent_.mean(dim=0).unsqueeze(0))
+            divergences_per[i] = divergences[i]/divergences_innate[i].std()
+            if return_output:
+                outputs.append(output)
+            else:
+                del output
     if return_details:
-        return output, divergences_per, np.argmin(divergences_per)
+        return outputs, divergences_per, loss, np.argmin(divergences_per)
     else:
-        return output
+        return outputs[np.argmin(divergences_per)]
 
 def get_bbox(img, lb):
     r = np.any(img, axis=(1, 2))
@@ -796,3 +831,11 @@ def get_bbox(img, lb):
     zmin, zmax = np.where(z>lb)[0][[0,-1]]
 
     return rmin, rmax, cmin, cmax, zmin, zmax
+
+def get_innate_divergences(latent_a, latent_b):
+    latent_a = latent_a.flatten(start_dim=1)
+    latent_b = latent_b.flatten(start_dim=1)
+    ret = np.zeros(latent_a.shape[0])
+    for i in range(latent_a.shape[0]):
+        ret[i] = SamplesLoss("sinkhorn")(latent_a[i].unsqueeze(0), latent_b.mean(dim=0).unsqueeze(0))
+    return ret
