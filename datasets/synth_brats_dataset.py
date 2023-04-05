@@ -17,6 +17,8 @@ from tqdm.contrib.concurrent import thread_map
 from multiprocessing import cpu_count
 import torchio as tio
 import h5py as h5
+from kornia import augmentation as K
+import torch
 
 class SynthBraTSDataset(Dataset):
     def __init__(self, data_dir, phase="train", num_samples=None, input_modalities=['t1'], output_modalities=['t1'], augmentation=False,down_factor=5):
@@ -52,6 +54,10 @@ class SynthBraTSDataset(Dataset):
             self.num_samples = int(0.2 * self.num_samples)
         logging.info(f'Creating dataset with {self.num_samples} examples')
 
+        self.transform_spatial_1 = K.RandomAffine3D((15., 20., 20.),translate=(0.1,0.1,0.2), p=0.4,keepdim=True)
+        self.transform_intensity_1 = K.RandomMotionBlur3D(5, 5., 0.5, p=0.4,keepdim=True)
+        self.transform_intensity_2 = lambda x: x + torch.randn_like(x)*np.percentile(x, 99)*0.03 if np.random.rand() < 0.4 else x
+
         self.images=[]
         self.gts=[]
 
@@ -65,6 +71,18 @@ class SynthBraTSDataset(Dataset):
     def __getitem__(self, idx):
         image = self.images[idx]
         gt = self.gts[idx]
+        if self.augmentation:
+            image = torch.from_numpy(image).unsqueeze(0)
+            gt = torch.from_numpy(gt).unsqueeze(0)
+            image = self.transform_spatial_1(image)
+            image = self.transform_intensity_1(image)
+            image = self.transform_intensity_2(image)
+            gt = self.transform_spatial_1(gt, params=self.transform_spatial_1._params)
+            gt = self.transform_spatial_2(gt, params=self.transform_spatial_2._params)
+            image = image.squeeze(0)
+            gt = gt.squeeze(0)
+            image = image.numpy()
+            gt = gt.numpy()
         return image, gt
 
 

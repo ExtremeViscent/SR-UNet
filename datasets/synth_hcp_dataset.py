@@ -70,10 +70,9 @@ class SynthHCPDataset(Dataset):
         self.transform  = tio.Compose([resample_transform,resize_transform])
         self.transform_gt = resize_transform
 
-        self.transform_spatial_1 = K.RandomRotation3D((15., 20., 20.), p=0.5,keepdim=True)
-        self.transform_spatial_2 = K.RandomAffine3D((15., 20., 20.), p=0.4,keepdim=True)
-        self.transform_intensity_1 = K.RandomMotionBlur3D(3, 35., 0.5, p=0.4,keepdim=True)
-        self.transform_intensity_2 = lambda x: x + torch.randn_like(x)*15 if np.random.rand() < 0.4 else x
+        self.transform_spatial_1 = K.RandomAffine3D((15., 20., 20.),translate=(0.1,0.1,0.2), p=0.4,keepdim=True)
+        self.transform_intensity_1 = K.RandomMotionBlur3D(5, 5., 0.5, p=0.4,keepdim=True)
+        self.transform_intensity_2 = lambda x: x + torch.randn_like(x)*np.percentile(x, 99)*0.03 if np.random.rand() < 0.4 else x
         self.images=[]
         self.gts=[]
 
@@ -91,7 +90,6 @@ class SynthHCPDataset(Dataset):
             image = torch.from_numpy(image).unsqueeze(0)
             gt = torch.from_numpy(gt).unsqueeze(0)
             image = self.transform_spatial_1(image)
-            image = self.transform_spatial_2(image)
             image = self.transform_intensity_1(image)
             image = self.transform_intensity_2(image)
             gt = self.transform_spatial_1(gt, params=self.transform_spatial_1._params)
